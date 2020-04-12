@@ -1,74 +1,95 @@
 import { useReducer, useEffect } from 'react';
 
-type EffectExecutor<TState> = (state: TState) => void;
+type EffectFunction<TState> = (state: TState) => void;
 
-interface Effect<TState> {
-  [key: string]: any;
-  exec: (state: TState) => void;
-}
+type Effect<TState> =
+  | {
+      [key: string]: any;
+      type: string;
+      exec?: EffectFunction<TState>;
+    }
+  | EffectFunction<TState>;
 
 type StateEffectTuple<TState> =
   | [TState, Effect<TState>[] | undefined]
   | [TState];
 
-type AggregatedEffectsState<TState> =
-  | [TState, StateEffectTuple<TState>[]]
-  | [TState];
+type AggregatedEffectsState<TState> = [TState, StateEffectTuple<TState>[]];
 
 type EffectReducer<TState, TEvent> = (
   state: TState,
-  event: TEvent
-) => StateEffectTuple<TState>;
+  event: TEvent,
+  exec: (effect: Effect<TState>) => void
+) => TState;
 
 const flushEffectsSymbol = Symbol();
 
-export function toEffect<TState>(exec: EffectExecutor<TState>): Effect<TState> {
+export function toEffect<TState>(exec: EffectFunction<TState>): Effect<TState> {
   return {
     type: exec.name,
     exec,
   };
 }
 
+interface EffectsMap<TState> {
+  [key: string]: EffectFunction<TState>;
+}
+
 export function useEffectReducer<TState, TEvent>(
   effectReducer: EffectReducer<TState, TEvent>,
-  initialState: TState
+  initialState: TState,
+  effectsMap?: EffectsMap<TState>
 ): [TState, React.Dispatch<TEvent>] {
-  // const effectsRef = useRef<StateEffectTuple<TState>[]>([]);
-
   const wrappedReducer = (
-    [state, prevEffectStates]: AggregatedEffectsState<TState>,
+    [state, effects]: AggregatedEffectsState<TState>,
     event: TEvent | typeof flushEffectsSymbol
   ): AggregatedEffectsState<TState> => {
+    const nextEffects: Array<Effect<TState>> = [];
+
     if (event === flushEffectsSymbol) {
       // Record that effects have already been executed
-      return [state];
+      return [state, []];
     }
 
-    const [nextState, nextEffects] = effectReducer(state, event);
+    const nextState = effectReducer(state, event, effect => {
+      nextEffects.push(effect);
+    });
 
     return [
       nextState,
-      prevEffectStates
-        ? [...prevEffectStates, [nextState, nextEffects]]
-        : [[nextState, nextEffects]],
+      nextEffects.length ? [...effects, [nextState, nextEffects]] : effects,
     ];
   };
 
-  const [[state, effectStates], dispatch] = useReducer(wrappedReducer, [
+  const [[state, stateEffectTuples], dispatch] = useReducer(wrappedReducer, [
     initialState,
+    [],
   ]);
 
   useEffect(() => {
-    if (effectStates) {
-      effectStates.forEach(([stateForEffect, effects]) => {
+    if (stateEffectTuples.length) {
+      stateEffectTuples.forEach(([stateForEffect, effects]) => {
         effects?.forEach(effect => {
-          effect.exec(stateForEffect);
+          let effectImplementation: EffectFunction<TState> | undefined;
+          if (typeof effect === 'object' && 'type' in effect) {
+            if (effectsMap && effectsMap[effect.type]) {
+              effectImplementation = effectsMap[effect.type] || effect.exec;
+            } else {
+              effectImplementation = effect.exec;
+            }
+          } else if (typeof effect === 'function') {
+            effectImplementation = effect;
+          }
+
+          if (effectImplementation) {
+            effectImplementation(stateForEffect);
+          }
         });
       });
 
       dispatch(flushEffectsSymbol);
     }
-  }, [effectStates]);
+  }, [stateEffectTuples]);
 
   return [state, dispatch];
 }
