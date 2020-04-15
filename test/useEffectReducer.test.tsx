@@ -1,11 +1,81 @@
 import * as React from 'react';
 import { useEffect } from 'react';
-import { render, cleanup } from '@testing-library/react';
 
-import { useEffectReducer, toEffect } from '../src';
+// have to add this because someone made a breaking change somewhere...
+
+import { render, cleanup, fireEvent, wait } from '@testing-library/react';
+
+import { useEffectReducer, toEffect, EffectReducer } from '../src';
+
+class MutationObserver {
+  public observe() {}
+  public disconnect() {}
+}
+(global as any).MutationObserver = MutationObserver;
 
 describe('useEffectReducer', () => {
   afterEach(cleanup);
+
+  it('basic example', async () => {
+    const fetchEffectReducer: EffectReducer<any, any> = (
+      state,
+      event,
+      exec
+    ) => {
+      switch (event.type) {
+        case 'FETCH':
+          exec({ type: 'fetchFromAPI', user: event.user });
+          return {
+            status: 'fetching',
+          };
+        case 'RESOLVE':
+          return {
+            status: 'fulfilled',
+            data: event.data,
+          };
+        default:
+          return state;
+      }
+    };
+
+    const Fetcher = () => {
+      const [state, dispatch] = useEffectReducer(
+        fetchEffectReducer,
+        { status: 'idle' },
+        {
+          fetchFromAPI(_, effect) {
+            setTimeout(() => {
+              dispatch({
+                type: 'RESOLVE',
+                data: effect.user,
+              });
+            }, 100);
+          },
+        }
+      );
+
+      return (
+        <div
+          onClick={() => dispatch({ type: 'FETCH', user: 42 })}
+          data-testid="result"
+        >
+          {state.data ? state.data : '--'}
+        </div>
+      );
+    };
+
+    const { getByTestId } = render(<Fetcher />);
+
+    const resultEl = getByTestId('result');
+
+    expect(resultEl.textContent).toEqual('--');
+
+    fireEvent.click(resultEl);
+
+    await wait(() => {
+      expect(resultEl.textContent).toEqual('42');
+    });
+  });
 
   it('handles batched dispatch calls', () => {
     const sideEffectCapture: any[] = [];

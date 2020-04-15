@@ -1,14 +1,17 @@
 import { useReducer, useEffect } from 'react';
 
-type EffectFunction<TState> = (state: TState) => void;
+type EffectFunction<TState> = (
+  state: TState,
+  effect: EffectObject<TState>
+) => void;
 
-type Effect<TState> =
-  | {
-      [key: string]: any;
-      type: string;
-      exec?: EffectFunction<TState>;
-    }
-  | EffectFunction<TState>;
+interface EffectObject<TState> {
+  [key: string]: any;
+  type: string;
+  exec?: EffectFunction<TState>;
+}
+
+type Effect<TState> = EffectObject<TState> | EffectFunction<TState>;
 
 type StateEffectTuple<TState> =
   | [TState, Effect<TState>[] | undefined]
@@ -16,7 +19,7 @@ type StateEffectTuple<TState> =
 
 type AggregatedEffectsState<TState> = [TState, StateEffectTuple<TState>[]];
 
-type EffectReducer<TState, TEvent> = (
+export type EffectReducer<TState, TEvent = any> = (
   state: TState,
   event: TEvent,
   exec: (effect: Effect<TState>) => void
@@ -82,7 +85,10 @@ export function useEffectReducer<TState, TEvent>(
           }
 
           if (effectImplementation) {
-            effectImplementation(stateForEffect);
+            effectImplementation(
+              stateForEffect,
+              typeof effect === 'object' ? effect : { type: effect.name }
+            );
           }
         });
       });
