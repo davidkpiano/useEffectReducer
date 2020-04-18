@@ -18,6 +18,21 @@
     "lint": "tsdx lint",
     "prepare": "tsdx build"
   },
+  "keywords": [
+    "react",
+    "hook",
+    "reducer",
+    "useReducer",
+    "useEffect",
+    "effect",
+    "sideeffect",
+    "side-effect",
+    "typescript"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/davidkpiano/useEffectReducer"
+  },
   "peerDependencies": {
     "react": ">=16"
   },
