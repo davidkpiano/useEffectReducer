@@ -162,10 +162,11 @@ const SomeComponent = () => {
 
 ## TypeScript
 
-The effect reducer can be specified as an `EffectReducer<TState, TEvent>`, where the generic types are:
+The effect reducer can be specified as an `EffectReducer<TState, TEvent, TEffect>`, where the generic types are:
 
 - The `state` type returned from the reducer
-- The `event` type that can be dispatched to the reducer
+- The `event` object type that can be dispatched to the reducer
+- The `effect` object type that can be executed
 
 ```ts
 import { useEffectReducer, EffectReducer } from 'use-effect-reducer';
@@ -198,14 +199,20 @@ type FetchEvent =
       data: User;
     };
 
-const fetchEffectReducer: EffectReducer<FetchState, FetchEvent> = (
+type FetchEffect = {
+  type: 'fetchFromAPI';
+  user: string;
+};
+
+const fetchEffectReducer: EffectReducer<FetchState, FetchEvent, FetchEffect> = (
   state,
   event,
   exec
 ) => {
   switch (event.type) {
     case 'FETCH':
-    // State and event types will be inferred!
+    // State, event, and effect types will be inferred!
+
     // Also you should probably switch on
     // `state.status` first ;-)
 

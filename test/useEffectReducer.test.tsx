@@ -45,11 +45,16 @@ describe('useEffectReducer', () => {
           data: User;
         };
 
-    const fetchEffectReducer: EffectReducer<FetchState, FetchEvent> = (
-      state,
-      event,
-      exec
-    ) => {
+    type FetchEffect = {
+      type: 'fetchFromAPI';
+      user: string;
+    };
+
+    const fetchEffectReducer: EffectReducer<
+      FetchState,
+      FetchEvent,
+      FetchEffect
+    > = (state, event, exec) => {
       switch (event.type) {
         case 'FETCH':
           exec({ type: 'fetchFromAPI', user: event.user });
@@ -107,12 +112,20 @@ describe('useEffectReducer', () => {
   });
 
   it('handles batched dispatch calls', () => {
+    interface ThingContext {
+      count: number;
+    }
+
+    type ThingEvent = {
+      type: 'INC';
+    };
+
     const sideEffectCapture: any[] = [];
     let renderCount = 0;
 
     const Thing = () => {
-      const [state, dispatch] = useEffectReducer(
-        (state: { count: number }, event: any, exec) => {
+      const [state, dispatch] = useEffectReducer<ThingContext, ThingEvent, any>(
+        (state, event: any, exec) => {
           if (event.type === 'INC') {
             exec(s => {
               sideEffectCapture.push(s.count);

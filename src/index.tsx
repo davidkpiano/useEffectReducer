@@ -11,43 +11,63 @@ export interface EffectObject<TState> {
   exec?: EffectFunction<TState>;
 }
 
-export type Effect<TState> = EffectObject<TState> | EffectFunction<TState>;
+export type Effect<TState, TEffect extends EffectObject<TState>> =
+  | TEffect
+  | EffectFunction<TState>;
 
-type StateEffectTuple<TState> =
-  | [TState, Effect<TState>[] | undefined]
+type StateEffectTuple<TState, TEffect extends EffectObject<TState>> =
+  | [TState, Effect<TState, TEffect>[] | undefined]
   | [TState];
 
-type AggregatedEffectsState<TState> = [TState, StateEffectTuple<TState>[]];
+type AggregatedEffectsState<TState, TEffect extends EffectObject<TState>> = [
+  TState,
+  StateEffectTuple<TState, TEffect>[]
+];
 
-export type EffectReducer<TState, TEvent = any> = (
+export interface EventObject {
+  type: string;
+  [key: string]: any;
+}
+
+export type EffectReducer<
+  TState,
+  TEvent extends EventObject,
+  TEffect extends EffectObject<TState> = any
+> = (
   state: TState,
   event: TEvent,
-  exec: (effect: Effect<TState>) => void
+  exec: (effect: TEffect | EffectFunction<TState>) => void
 ) => TState;
 
 const flushEffectsSymbol = Symbol();
 
-export function toEffect<TState>(exec: EffectFunction<TState>): Effect<TState> {
+export function toEffect<TState>(
+  exec: EffectFunction<TState>
+): Effect<TState, any> {
   return {
     type: exec.name,
     exec,
   };
 }
 
-export interface EffectsMap<TState> {
+interface EffectsMap<TState> {
   [key: string]: EffectFunction<TState>;
 }
 
-export function useEffectReducer<TState, TEvent>(
-  effectReducer: EffectReducer<TState, TEvent>,
+export function useEffectReducer<
+  TState,
+  TEvent extends EventObject,
+  TEffect extends EffectObject<TState> = any
+>(
+  effectReducer: EffectReducer<TState, TEvent, TEffect>,
   initialState: TState,
   effectsMap?: EffectsMap<TState>
 ): [TState, React.Dispatch<TEvent>] {
   const wrappedReducer = (
-    [state, effects]: AggregatedEffectsState<TState>,
+    [state, effects]: AggregatedEffectsState<TState, TEffect>,
     event: TEvent | typeof flushEffectsSymbol
-  ): AggregatedEffectsState<TState> => {
-    const nextEffects: Array<Effect<TState>> = [];
+  ): AggregatedEffectsState<TState, TEffect> => {
+    const nextEffects: Array<Effect<TState, TEffect>> = [];
 
     if (event === flushEffectsSymbol) {
       // Record that effects have already been executed
