@@ -5,7 +5,7 @@ import { useEffect } from 'react';
 
 import { render, cleanup, fireEvent, wait } from '@testing-library/react';
 
-import { useEffectReducer, toEffect, EffectReducer } from '../src';
+import { useEffectReducer, EffectReducer } from '../src';
 
 class MutationObserver {
   public observe() {}
@@ -17,7 +17,35 @@ describe('useEffectReducer', () => {
   afterEach(cleanup);
 
   it('basic example', async () => {
-    const fetchEffectReducer: EffectReducer<any, any> = (
+    interface User {
+      name: string;
+    }
+
+    type FetchState =
+      | {
+          status: 'idle';
+          user: undefined;
+        }
+      | {
+          status: 'fetching';
+          user: User | undefined;
+        }
+      | {
+          status: 'fulfilled';
+          user: User;
+        };
+
+    type FetchEvent =
+      | {
+          type: 'FETCH';
+          user: string;
+        }
+      | {
+          type: 'RESOLVE';
+          data: User;
+        };
+
+    const fetchEffectReducer: EffectReducer<FetchState, FetchEvent> = (
       state,
       event,
       exec
@@ -26,12 +54,13 @@ describe('useEffectReducer', () => {
         case 'FETCH':
           exec({ type: 'fetchFromAPI', user: event.user });
           return {
+            ...state,
             status: 'fetching',
           };
         case 'RESOLVE':
           return {
             status: 'fulfilled',
-            data: event.data,
+            user: event.data,
           };
         default:
           return state;
@@ -41,7 +70,7 @@ describe('useEffectReducer', () => {
     const Fetcher = () => {
       const [state, dispatch] = useEffectReducer(
         fetchEffectReducer,
-        { status: 'idle' },
+        { status: 'idle', user: undefined },
         {
           fetchFromAPI(_, effect) {
             setTimeout(() => {
@@ -56,10 +85,10 @@ describe('useEffectReducer', () => {
 
       return (
         <div
-          onClick={() => dispatch({ type: 'FETCH', user: 42 })}
+          onClick={() => dispatch({ type: 'FETCH', user: '42' })}
           data-testid="result"
         >
-          {state.data ? state.data : '--'}
+          {state.user ? state.user : '--'}
         </div>
       );
     };
@@ -85,11 +114,9 @@ describe('useEffectReducer', () => {
       const [state, dispatch] = useEffectReducer(
         (state: { count: number }, event: any, exec) => {
           if (event.type === 'INC') {
-            exec(
-              toEffect(s => {
-                sideEffectCapture.push(s.count);
-              })
-            );
+            exec(s => {
+              sideEffectCapture.push(s.count);
+            });
             return { ...state, count: state.count + 1 };
           }
 

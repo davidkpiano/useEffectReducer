@@ -1,17 +1,17 @@
 import { useReducer, useEffect } from 'react';
 
-type EffectFunction<TState> = (
+export type EffectFunction<TState> = (
   state: TState,
   effect: EffectObject<TState>
 ) => void;
 
-interface EffectObject<TState> {
+export interface EffectObject<TState> {
   [key: string]: any;
   type: string;
   exec?: EffectFunction<TState>;
 }
 
-type Effect<TState> = EffectObject<TState> | EffectFunction<TState>;
+export type Effect<TState> = EffectObject<TState> | EffectFunction<TState>;
 
 type StateEffectTuple<TState> =
   | [TState, Effect<TState>[] | undefined]
@@ -34,7 +34,7 @@ export function toEffect<TState>(exec: EffectFunction<TState>): Effect<TState> {
   };
 }
 
-interface EffectsMap<TState> {
+export interface EffectsMap<TState> {
   [key: string]: EffectFunction<TState>;
 }
 
