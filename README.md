@@ -6,6 +6,8 @@ Inspired by the [`useReducerWithEmitEffect` hook idea](https://gist.github.com/s
 
 If you know how to [`useReducer`](https://reactjs.org/docs/hooks-reference.html#usereducer), you already know how to `useEffectReducer`.
 
+[💻 CodeSandbox example: Dog Fetcher with `useEffectReducer`](https://codesandbox.io/s/dog-fetcher-with-useeffectreducer-g192g)
+
 <!-- START doctoc generated TOC please keep comment here to allow auto update -->
 <!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
 
@@ -35,13 +37,13 @@ Create an effect reducer:
 const someEffectReducer = (state, event, exec) => {
   // execute effects like this:
   exec(() => {/* ... */});
-  
+
   // or parameterized (better):
-  exec({ type: 'fetchUser', user: 'Sophie' });
-  
+  exec({ type: 'fetchUser', user: event.user });
+
   // and treat this like a normal reducer!
   // ...
-  
+
   return state;
 });
 ```
@@ -55,7 +57,7 @@ const [state, dispatch] = useEffectReducer(someEffectReducer, initialState, {
 });
 
 // Just like useReducer:
-dispatch({ type: 'FETCH', user: 'David' });
+dispatch({ type: 'FETCH', user: 'Sophie' });
 ```
 
 ## Quick Start
@@ -126,7 +128,7 @@ const Fetcher = () => {
     { status: 'idle', user: undefined },
     {
       // Specify how effects are implemented
-      fetchFromAPI(_, effect) {
+      fetchFromAPI: (_, effect) => {
         fetch(`/api/users/${effect.user}`)
           .then(res => res.json())
           .then(data => {
