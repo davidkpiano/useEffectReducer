@@ -1,4 +1,4 @@
-import { useReducer, useEffect } from 'react';
+import { useReducer, useEffect, useCallback } from 'react';
 
 export type EffectFunction<TState> = (
   state: TState,
@@ -54,6 +54,16 @@ interface EffectsMap<TState> {
   [key: string]: EffectFunction<TState>;
 }
 
+const toEventObject = <TEvent extends EventObject>(
+  event: TEvent['type'] | TEvent
+): TEvent => {
+  if (typeof event === 'string') {
+    return { type: event } as TEvent;
+  }
+
+  return event;
+};
+
 export function useEffectReducer<
   TState,
   TEvent extends EventObject,
@@ -62,7 +72,7 @@ export function useEffectReducer<
   effectReducer: EffectReducer<TState, TEvent, TEffect>,
   initialState: TState,
   effectsMap?: EffectsMap<TState>
-): [TState, React.Dispatch<TEvent>] {
+): [TState, React.Dispatch<TEvent | TEvent['type']>] {
   const wrappedReducer = (
     [state, effects]: AggregatedEffectsState<TState, TEffect>,
     event: TEvent | typeof flushEffectsSymbol
@@ -88,6 +98,10 @@ export function useEffectReducer<
     initialState,
     [],
   ]);
+
+  const wrappedDispatch = useCallback((event: TEvent | TEvent['type']) => {
+    dispatch(toEventObject(event));
+  }, []);
 
   useEffect(() => {
     if (stateEffectTuples.length) {
@@ -117,5 +131,5 @@ export function useEffectReducer<
     }
   }, [stateEffectTuples]);
 
-  return [state, dispatch];
+  return [state, wrappedDispatch];
 }

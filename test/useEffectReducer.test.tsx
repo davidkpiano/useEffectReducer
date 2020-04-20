@@ -160,4 +160,41 @@ describe('useEffectReducer', () => {
     // Should be less than number of side-effects due to batching
     expect(renderCount).toBeLessThan(sideEffectCapture.length);
   });
+
+  it('handles dispatched string events', () => {
+    interface ThingContext {
+      count: number;
+    }
+
+    type ThingEvent = {
+      type: 'INC';
+    };
+
+    const Thing = () => {
+      const [state, dispatch] = useEffectReducer<ThingContext, ThingEvent>(
+        (state, event) => {
+          if (event.type === 'INC') {
+            return { ...state, count: state.count + 1 };
+          }
+
+          return state;
+        },
+        { count: 0 }
+      );
+
+      useEffect(() => {
+        dispatch('INC');
+        dispatch('INC');
+        dispatch('INC');
+        dispatch('INC');
+        dispatch('INC');
+      }, []);
+
+      return <div data-testid="count">{state.count}</div>;
+    };
+
+    const { getByTestId } = render(<Thing />);
+
+    expect(getByTestId('count').textContent).toEqual('5');
+  });
 });

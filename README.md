@@ -153,6 +153,16 @@ const Fetcher = () => {
 };
 ```
 
+## String Events
+
+The events handled by the effect reducers are intended to be event objects with a `type` property; e.g., `{ type: 'FETCH', other: 'data' }`. For events without payload, you can dispatch the event type alone, which will be converted to an event object inside the effect reducer:
+
+```js
+// dispatched as `{ type: 'INC' }`
+// and is the same as `dispatch({ type: 'INC' })`
+dispatch('INC');
+```
+
 ## API
 
 ### `useEffectReducer` hook
