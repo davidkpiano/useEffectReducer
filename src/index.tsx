@@ -32,7 +32,7 @@ export interface EventObject {
 export type EffectReducer<
   TState,
   TEvent extends EventObject,
-  TEffect extends EffectObject<TState> = any
+  TEffect extends EffectObject<TState> = EffectObject<TState>
 > = (
   state: TState,
   event: TEvent,
@@ -57,7 +57,7 @@ interface EffectsMap<TState> {
 export function useEffectReducer<
   TState,
   TEvent extends EventObject,
-  TEffect extends EffectObject<TState> = any
+  TEffect extends EffectObject<TState> = EffectObject<TState>
 >(
   effectReducer: EffectReducer<TState, TEvent, TEffect>,
   initialState: TState,

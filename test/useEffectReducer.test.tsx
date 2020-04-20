@@ -1,12 +1,11 @@
 import * as React from 'react';
 import { useEffect } from 'react';
 
-// have to add this because someone made a breaking change somewhere...
-
 import { render, cleanup, fireEvent, wait } from '@testing-library/react';
 
 import { useEffectReducer, EffectReducer } from '../src';
 
+// have to add this because someone made a breaking change somewhere...
 class MutationObserver {
   public observe() {}
   public disconnect() {}
@@ -124,8 +123,8 @@ describe('useEffectReducer', () => {
     let renderCount = 0;
 
     const Thing = () => {
-      const [state, dispatch] = useEffectReducer<ThingContext, ThingEvent, any>(
-        (state, event: any, exec) => {
+      const [state, dispatch] = useEffectReducer<ThingContext, ThingEvent>(
+        (state, event, exec) => {
           if (event.type === 'INC') {
             exec(s => {
               sideEffectCapture.push(s.count);
