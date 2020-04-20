@@ -74,7 +74,7 @@ import { useEffectReducer } from 'use-effect-reducer';
 // I know, I know, yet another counter example
 const countReducer = (state, event, exec) => {
   switch (event.type) {
-    case 'ADD':
+    case 'INC':
       exec(() => {
         // "Execute" a side-effect here
         console.log('Going up!');
@@ -93,7 +93,12 @@ const countReducer = (state, event, exec) => {
 const App = () => {
   const [state, dispatch] = useEffectReducer(countReducer, { count: 0 });
 
-  return <div>Count: {state.count}</div>;
+  return <div>
+    <output>Count: {state.count}</output>
+    <button onClick={() => dispatch('INC')}>
+      Increment
+    </button>
+  </div>;
 };
 ```
 
