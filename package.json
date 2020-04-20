@@ -1,6 +1,6 @@
 {
   "name": "use-effect-reducer",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "license": "MIT",
   "main": "dist/index.js",
   "typings": "dist/index.d.ts",
@@ -17,6 +17,21 @@
     "test": "tsdx test --passWithNoTests",
     "lint": "tsdx lint",
     "prepare": "tsdx build"
+  },
+  "keywords": [
+    "react",
+    "hook",
+    "reducer",
+    "useReducer",
+    "useEffect",
+    "effect",
+    "sideeffect",
+    "side-effect",
+    "typescript"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/davidkpiano/useEffectReducer"
   },
   "peerDependencies": {
     "react": ">=16"
