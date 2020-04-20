@@ -2,6 +2,8 @@
 
 A [React hook](https://reactjs.org/docs/hooks-intro.html) for managing side-effects in your reducers.
 
+Inspired by the [`useReducerWithEmitEffect` hook idea](https://gist.github.com/sophiebits/145c47544430c82abd617c9cdebefee8) by [Sophie Alpert](https://twitter.com/sophiebits).
+
 If you know how to [`useReducer`](https://reactjs.org/docs/hooks-reference.html#usereducer), you already know how to `useEffectReducer`.
 
 <!-- START doctoc generated TOC please keep comment here to allow auto update -->
@@ -15,24 +17,41 @@ If you know how to [`useReducer`](https://reactjs.org/docs/hooks-reference.html#
 
 ## Installation
 
-1. Install it:
+Install it:
 
 ```bash
 npm install use-effect-reducer
 ```
 
-2. Import it:
+Import it:
 
 ```js
 import { useEffectReducer } from 'use-effect-reducer';
 ```
 
-3. [Use it:](#quick-start)
+Create an effect reducer:
+
+```js
+const someEffectReducer = (state, event, exec) => {
+  // execute effects like this:
+  exec(() => {/* ... */});
+  
+  // or parameterized (better):
+  exec({ type: 'fetchUser', user: 'Sophie' });
+  
+  // and treat this like a normal reducer!
+  // ...
+  
+  return state;
+});
+```
+
+[Use it:](#quick-start)
 
 ```js
 // ...
 const [state, dispatch] = useEffectReducer(someEffectReducer, initialState, {
-  // effects implementation
+  // implementation of effects
 });
 
 // Just like useReducer:
