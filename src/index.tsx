@@ -41,6 +41,12 @@ export type EffectReducer<
 
 const flushEffectsSymbol = Symbol();
 
+// 🚽
+interface FlushEvent {
+  type: typeof flushEffectsSymbol;
+  count: number;
+}
+
 export function toEffect<TState>(
   exec: EffectFunction<TState>
 ): Effect<TState, any> {
@@ -65,13 +71,13 @@ export function useEffectReducer<
 ): [TState, React.Dispatch<TEvent>] {
   const wrappedReducer = (
     [state, effects]: AggregatedEffectsState<TState, TEffect>,
-    event: TEvent | typeof flushEffectsSymbol
+    event: TEvent | FlushEvent
   ): AggregatedEffectsState<TState, TEffect> => {
     const nextEffects: Array<Effect<TState, TEffect>> = [];
 
-    if (event === flushEffectsSymbol) {
+    if (event.type === flushEffectsSymbol) {
       // Record that effects have already been executed
-      return [state, []];
+      return [state, effects.slice(event.count)];
     }
 
     const nextState = effectReducer(state, event, effect => {
@@ -113,7 +119,7 @@ export function useEffectReducer<
         });
       });
 
-      dispatch(flushEffectsSymbol);
+      dispatch({ type: flushEffectsSymbol, count: stateEffectTuples.length });
     }
   }, [stateEffectTuples]);
 
