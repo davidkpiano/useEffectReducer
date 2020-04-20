@@ -160,4 +160,42 @@ describe('useEffectReducer', () => {
     // Should be less than number of side-effects due to batching
     expect(renderCount).toBeLessThan(sideEffectCapture.length);
   });
+
+  it('supports queueing effects during commit phase', () => {
+    let effectCount = 0;
+
+    const Thing = () => {
+      const [hasClicked, setHasClicked] = React.useState(false);
+      const [count, dispatch] = useEffectReducer((state, _event, exec) => {
+        exec(() => (effectCount += 1));
+        return state + 1;
+      }, 0);
+
+      React.useLayoutEffect(() => {
+        if (hasClicked) dispatch({ type: 'foo' });
+      }, [hasClicked, dispatch]);
+
+      function handleClick() {
+        setHasClicked(true);
+        dispatch({ type: 'foo' });
+      }
+
+      return (
+        <>
+          <div data-testid="count">{count}</div>
+          <button data-testid="button" onClick={handleClick} />
+        </>
+      );
+    };
+
+    const { getByTestId } = render(<Thing />);
+
+    expect(getByTestId('count').textContent).toEqual('0');
+
+    const buttonEl = getByTestId('button');
+    fireEvent.click(buttonEl);
+
+    expect(getByTestId('count').textContent).toEqual('2');
+    expect(effectCount).toEqual(2);
+  });
 });
