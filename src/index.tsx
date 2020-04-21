@@ -86,7 +86,7 @@ export function useEffectReducer<
       return [state, effects.slice(event.count)];
     }
 
-    const nextState = effectReducer(state, event, (effect) => {
+    const nextState = effectReducer(state, event, effect => {
       nextEffects.push(effect);
     });
 
@@ -104,7 +104,7 @@ export function useEffectReducer<
   useEffect(() => {
     if (stateEffectTuples.length) {
       stateEffectTuples.forEach(([stateForEffect, effects]) => {
-        effects?.forEach((effect) => {
+        effects?.forEach(effect => {
           let effectImplementation: EffectFunction<TState, TEvent> | undefined;
           if (typeof effect === 'object' && 'type' in effect) {
             if (effectsMap && effectsMap[effect.type]) {
