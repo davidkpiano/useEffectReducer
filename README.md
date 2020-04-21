@@ -127,24 +127,24 @@ const fetchEffectReducer = (state, event, exec) => {
   }
 };
 
+const initialState = { status: 'idle', user: undefined };
+
+const fetchFromAPIEffect = (_, effect, dispatch) => {
+  fetch(`/api/users/${effect.user}`)
+    .then(res => res.json())
+    .then(data => {
+      dispatch({
+        type: 'RESOLVE',
+        data,
+      });
+    });
+};
+
 const Fetcher = () => {
-  const [state, dispatch] = useEffectReducer(
-    fetchEffectReducer,
-    { status: 'idle', user: undefined },
-    {
-      // Specify how effects are implemented
-      fetchFromAPI: (_, effect) => {
-        fetch(`/api/users/${effect.user}`)
-          .then(res => res.json())
-          .then(data => {
-            dispatch({
-              type: 'RESOLVE',
-              data,
-            });
-          });
-      },
-    }
-  );
+  const [state, dispatch] = useEffectReducer(fetchEffectReducer, initialState, {
+    // Specify how effects are implemented
+    fetchFromAPI: fetchFromAPIEffect,
+  });
 
   return (
     <button
@@ -179,7 +179,7 @@ Additionally, the `useEffectReducer` hook takes a 3rd argument, which is the imp
 ```js
 const SomeComponent = () => {
   const [state, dispatch] = useEffectReducer(someEffectReducer, initialState, {
-    log: (state, effect) => {
+    log: (state, effect, dispatch) => {
       console.log(state);
     },
   });
