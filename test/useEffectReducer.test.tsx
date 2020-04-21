@@ -110,6 +110,101 @@ describe('useEffectReducer', () => {
     });
   });
 
+  it('third argument dispatch', async () => {
+    interface User {
+      name: string;
+    }
+
+    type FetchState =
+      | {
+          status: 'idle';
+          user: undefined;
+        }
+      | {
+          status: 'fetching';
+          user: User | undefined;
+        }
+      | {
+          status: 'fulfilled';
+          user: User;
+        };
+
+    type FetchEvent =
+      | {
+          type: 'FETCH';
+          user: string;
+        }
+      | {
+          type: 'RESOLVE';
+          data: User;
+        };
+
+    type FetchEffect = {
+      type: 'fetchFromAPI';
+      user: string;
+    };
+
+    const fetchEffectReducer: EffectReducer<
+      FetchState,
+      FetchEvent,
+      FetchEffect
+    > = (state, event, exec) => {
+      switch (event.type) {
+        case 'FETCH':
+          exec({ type: 'fetchFromAPI', user: event.user });
+          return {
+            ...state,
+            status: 'fetching',
+          };
+        case 'RESOLVE':
+          return {
+            status: 'fulfilled',
+            user: event.data,
+          };
+        default:
+          return state;
+      }
+    };
+
+    const Fetcher = () => {
+      const [state, dispatch] = useEffectReducer(
+        fetchEffectReducer,
+        { status: 'idle', user: undefined },
+        {
+          fetchFromAPI(_, effect, _dispatch) {
+            setTimeout(() => {
+              _dispatch({
+                type: 'RESOLVE',
+                data: effect.user,
+              });
+            }, 100);
+          },
+        }
+      );
+
+      return (
+        <div
+          onClick={() => dispatch({ type: 'FETCH', user: '42' })}
+          data-testid="result"
+        >
+          {state.user ? state.user : '--'}
+        </div>
+      );
+    };
+
+    const { getByTestId } = render(<Fetcher />);
+
+    const resultEl = getByTestId('result');
+
+    expect(resultEl.textContent).toEqual('--');
+
+    fireEvent.click(resultEl);
+
+    await wait(() => {
+      expect(resultEl.textContent).toEqual('42');
+    });
+  });
+
   it('handles batched dispatch calls', () => {
     interface ThingContext {
       count: number;
@@ -161,40 +256,41 @@ describe('useEffectReducer', () => {
     expect(renderCount).toBeLessThan(sideEffectCapture.length);
   });
 
-  it('handles dispatched string events', () => {
-    interface ThingContext {
-      count: number;
-    }
-
-    type ThingEvent = {
-      type: 'INC';
-    };
+  it('supports queueing effects during commit phase', () => {
+    let effectCount = 0;
 
     const Thing = () => {
-      const [state, dispatch] = useEffectReducer<ThingContext, ThingEvent>(
-        (state, event) => {
-          if (event.type === 'INC') {
-            return { ...state, count: state.count + 1 };
-          }
+      const [hasClicked, setHasClicked] = React.useState(false);
+      const [count, dispatch] = useEffectReducer((state, _event, exec) => {
+        exec(() => (effectCount += 1));
+        return state + 1;
+      }, 0);
 
-          return state;
-        },
-        { count: 0 }
+      React.useLayoutEffect(() => {
+        if (hasClicked) dispatch({ type: 'foo' });
+      }, [hasClicked, dispatch]);
+
+      function handleClick() {
+        setHasClicked(true);
+        dispatch({ type: 'foo' });
+      }
+
+      return (
+        <>
+          <div data-testid="count">{count}</div>
+          <button data-testid="button" onClick={handleClick} />
+        </>
       );
-
-      useEffect(() => {
-        dispatch('INC');
-        dispatch('INC');
-        dispatch('INC');
-        dispatch('INC');
-        dispatch('INC');
-      }, []);
-
-      return <div data-testid="count">{state.count}</div>;
     };
 
     const { getByTestId } = render(<Thing />);
 
-    expect(getByTestId('count').textContent).toEqual('5');
+    expect(getByTestId('count').textContent).toEqual('0');
+
+    const buttonEl = getByTestId('button');
+    fireEvent.click(buttonEl);
+
+    expect(getByTestId('count').textContent).toEqual('2');
+    expect(effectCount).toEqual(2);
   });
 });

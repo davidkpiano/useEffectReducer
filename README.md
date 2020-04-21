@@ -14,6 +14,10 @@ If you know how to [`useReducer`](https://reactjs.org/docs/hooks-reference.html#
 - [Installation](#installation)
 - [Quick Start](#quick-start)
 - [Named Effects](#named-effects)
+- [Effect Implementations](#effect-implementations)
+- [API](#api)
+  - [`useEffectReducer` hook](#useeffectreducer-hook)
+- [TypeScript](#typescript)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
@@ -74,7 +78,7 @@ import { useEffectReducer } from 'use-effect-reducer';
 // I know, I know, yet another counter example
 const countReducer = (state, event, exec) => {
   switch (event.type) {
-    case 'ADD':
+    case 'INC':
       exec(() => {
         // "Execute" a side-effect here
         console.log('Going up!');
@@ -93,7 +97,12 @@ const countReducer = (state, event, exec) => {
 const App = () => {
   const [state, dispatch] = useEffectReducer(countReducer, { count: 0 });
 
-  return <div>Count: {state.count}</div>;
+  return (
+    <div>
+      <output>Count: {state.count}</output>
+      <button onClick={() => dispatch('INC')}>Increment</button>
+    </div>
+  );
 };
 ```
 
@@ -122,24 +131,24 @@ const fetchEffectReducer = (state, event, exec) => {
   }
 };
 
+const initialState = { status: 'idle', user: undefined };
+
+const fetchFromAPIEffect = (_, effect, dispatch) => {
+  fetch(`/api/users/${effect.user}`)
+    .then(res => res.json())
+    .then(data => {
+      dispatch({
+        type: 'RESOLVE',
+        data,
+      });
+    });
+};
+
 const Fetcher = () => {
-  const [state, dispatch] = useEffectReducer(
-    fetchEffectReducer,
-    { status: 'idle', user: undefined },
-    {
-      // Specify how effects are implemented
-      fetchFromAPI: (_, effect) => {
-        fetch(`/api/users/${effect.user}`)
-          .then(res => res.json())
-          .then(data => {
-            dispatch({
-              type: 'RESOLVE',
-              data,
-            });
-          });
-      },
-    }
-  );
+  const [state, dispatch] = useEffectReducer(fetchEffectReducer, initialState, {
+    // Specify how effects are implemented
+    fetchFromAPI: fetchFromAPIEffect,
+  });
 
   return (
     <button
@@ -163,6 +172,14 @@ The events handled by the effect reducers are intended to be event objects with 
 dispatch('INC');
 ```
 
+## Effect Implementations
+
+An effect implementation is a function that takes 3 arguments:
+
+1. The `state` at the time the effect was executed with `exec(effect)`
+2. The `event` object that triggered the effect
+3. The effect reducer's `dispatch` function to dispatch events back to it. This enables dispatching within effects in the `effectMap` if it is written outside of the scope of your component. If your effects require access to variables and functions in the scope of your component, write your `effectMap` there.
+
 ## API
 
 ### `useEffectReducer` hook
@@ -182,7 +199,7 @@ Additionally, the `useEffectReducer` hook takes a 3rd argument, which is the imp
 ```js
 const SomeComponent = () => {
   const [state, dispatch] = useEffectReducer(someEffectReducer, initialState, {
-    log: (state, effect) => {
+    log: (state, effect, dispatch) => {
       console.log(state);
     },
   });
