@@ -158,6 +158,8 @@ const Fetcher = () => {
 };
 ```
 
+Each method of the `effectMap` receives three arguments: the reducer's `state`, the `event`, and reducer's `dispatch`. This enables dispatching within effects in the `effectMap` if it is written outside of the scope of your component. If your effects require access to variables and functions in the scope of your component, write your `effectMap` there.
+
 ## API
 
 ### `useEffectReducer` hook
