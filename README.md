@@ -11,12 +11,14 @@ If you know how to [`useReducer`](https://reactjs.org/docs/hooks-reference.html#
 <!-- START doctoc generated TOC please keep comment here to allow auto update -->
 <!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
 
+
 - [Installation](#installation)
 - [Quick Start](#quick-start)
 - [Named Effects](#named-effects)
 - [Effect Implementations](#effect-implementations)
 - [API](#api)
   - [`useEffectReducer` hook](#useeffectreducer-hook)
+- [TypeScript](#typescript)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
