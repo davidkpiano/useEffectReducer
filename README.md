@@ -14,6 +14,9 @@ If you know how to [`useReducer`](https://reactjs.org/docs/hooks-reference.html#
 - [Installation](#installation)
 - [Quick Start](#quick-start)
 - [Named Effects](#named-effects)
+- [Effect Implementations](#effect-implementations)
+- [API](#api)
+  - [`useEffectReducer` hook](#useeffectreducer-hook)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
@@ -158,7 +161,13 @@ const Fetcher = () => {
 };
 ```
 
-Each method of the `effectMap` receives three arguments: the reducer's `state`, the `event`, and reducer's `dispatch`. This enables dispatching within effects in the `effectMap` if it is written outside of the scope of your component. If your effects require access to variables and functions in the scope of your component, write your `effectMap` there.
+## Effect Implementations
+
+An effect implementation is a function that takes 3 arguments:
+
+1. The `state` at the time the effect was executed with `exec(effect)`
+2. The `event` object that triggered the effect
+3. The effect reducer's `dispatch` function to dispatch events back to it. This enables dispatching within effects in the `effectMap` if it is written outside of the scope of your component. If your effects require access to variables and functions in the scope of your component, write your `effectMap` there.
 
 ## API
 
