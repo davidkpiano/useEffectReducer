@@ -110,6 +110,101 @@ describe('useEffectReducer', () => {
     });
   });
 
+  it('third argument dispatch', async () => {
+    interface User {
+      name: string;
+    }
+
+    type FetchState =
+      | {
+          status: 'idle';
+          user: undefined;
+        }
+      | {
+          status: 'fetching';
+          user: User | undefined;
+        }
+      | {
+          status: 'fulfilled';
+          user: User;
+        };
+
+    type FetchEvent =
+      | {
+          type: 'FETCH';
+          user: string;
+        }
+      | {
+          type: 'RESOLVE';
+          data: User;
+        };
+
+    type FetchEffect = {
+      type: 'fetchFromAPI';
+      user: string;
+    };
+
+    const fetchEffectReducer: EffectReducer<
+      FetchState,
+      FetchEvent,
+      FetchEffect
+    > = (state, event, exec) => {
+      switch (event.type) {
+        case 'FETCH':
+          exec({ type: 'fetchFromAPI', user: event.user });
+          return {
+            ...state,
+            status: 'fetching',
+          };
+        case 'RESOLVE':
+          return {
+            status: 'fulfilled',
+            user: event.data,
+          };
+        default:
+          return state;
+      }
+    };
+
+    const Fetcher = () => {
+      const [state, dispatch] = useEffectReducer(
+        fetchEffectReducer,
+        { status: 'idle', user: undefined },
+        {
+          fetchFromAPI(_, effect, _dispatch) {
+            setTimeout(() => {
+              _dispatch({
+                type: 'RESOLVE',
+                data: effect.user,
+              });
+            }, 100);
+          },
+        }
+      );
+
+      return (
+        <div
+          onClick={() => dispatch({ type: 'FETCH', user: '42' })}
+          data-testid="result"
+        >
+          {state.user ? state.user : '--'}
+        </div>
+      );
+    };
+
+    const { getByTestId } = render(<Fetcher />);
+
+    const resultEl = getByTestId('result');
+
+    expect(resultEl.textContent).toEqual('--');
+
+    fireEvent.click(resultEl);
+
+    await wait(() => {
+      expect(resultEl.textContent).toEqual('42');
+    });
+  });
+
   it('handles batched dispatch calls', () => {
     interface ThingContext {
       count: number;
