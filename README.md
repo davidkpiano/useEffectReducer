@@ -93,12 +93,12 @@ const countReducer = (state, event, exec) => {
 const App = () => {
   const [state, dispatch] = useEffectReducer(countReducer, { count: 0 });
 
-  return <div>
-    <output>Count: {state.count}</output>
-    <button onClick={() => dispatch('INC')}>
-      Increment
-    </button>
-  </div>;
+  return (
+    <div>
+      <output>Count: {state.count}</output>
+      <button onClick={() => dispatch('INC')}>Increment</button>
+    </div>
+  );
 };
 ```
 
