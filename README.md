@@ -93,12 +93,12 @@ const countReducer = (state, event, exec) => {
 const App = () => {
   const [state, dispatch] = useEffectReducer(countReducer, { count: 0 });
 
-  return <div>
-    <output>Count: {state.count}</output>
-    <button onClick={() => dispatch('INC')}>
-      Increment
-    </button>
-  </div>;
+  return (
+    <div>
+      <output>Count: {state.count}</output>
+      <button onClick={() => dispatch('INC')}>Increment</button>
+    </div>
+  );
 };
 ```
 
@@ -157,6 +157,8 @@ const Fetcher = () => {
   );
 };
 ```
+
+Each method of the `effectMap` receives three arguments: the reducer's `state`, the `event`, and reducer's `dispatch`. This enables dispatching within effects in the `effectMap` if it is written outside of the scope of your component. If your effects require access to variables and functions in the scope of your component, write your `effectMap` there.
 
 ## API
 
