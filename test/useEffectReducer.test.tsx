@@ -322,7 +322,6 @@ describe('useEffectReducer', () => {
                   started = true;
 
                   return () => {
-                    console.log('calling stopped');
                     stopped = true;
                   };
                 }),
@@ -368,5 +367,79 @@ describe('useEffectReducer', () => {
     await waitFor(() => {
       expect(stopped).toBeTruthy();
     });
+  });
+
+  it('should run cleanup when the component is unmounted', () => {
+    // @ts-ignore
+    let started = false;
+    // @ts-ignore
+    let stopped = false;
+
+    const reducer: EffectReducer<{ status: string }, { type: 'START' }> = (
+      state,
+      event,
+      exec
+    ) => {
+      if (event.type === 'START') {
+        exec(() => {
+          started = true;
+
+          return () => {
+            stopped = true;
+          };
+        });
+
+        return {
+          status: 'started',
+        };
+      }
+
+      return state;
+    };
+
+    const Thing = () => {
+      const [state, dispatch] = useEffectReducer(reducer, { status: 'idle' });
+
+      return (
+        <div
+          data-testid="status"
+          onClick={() => {
+            dispatch('START');
+          }}
+        >
+          {state.status}
+        </div>
+      );
+    };
+
+    const App = () => {
+      const [hidden, setHidden] = React.useState(false);
+
+      return hidden ? null : (
+        <div>
+          <button data-testid="hide" onClick={() => setHidden(true)}></button>
+          <Thing />
+        </div>
+      );
+    };
+
+    const { getByTestId } = render(<App />);
+
+    const statusEl = getByTestId('status');
+    const buttonEl = getByTestId('hide');
+
+    expect(statusEl.textContent).toEqual('idle');
+    expect(started).toBeFalsy();
+
+    fireEvent.click(statusEl);
+
+    expect(started).toBeTruthy();
+    expect(stopped).toBeFalsy();
+
+    expect(statusEl.textContent).toEqual('started');
+
+    fireEvent.click(buttonEl);
+
+    expect(stopped).toBeTruthy();
   });
 });

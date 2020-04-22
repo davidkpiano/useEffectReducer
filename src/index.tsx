@@ -1,4 +1,4 @@
-import { useReducer, useEffect, useCallback } from 'react';
+import { useReducer, useEffect, useCallback, useRef } from 'react';
 
 type CleanupFunction = () => void;
 
@@ -20,14 +20,14 @@ export type Effect<
   TEffect extends EffectObject<TState, TEvent>
 > = TEffect | EffectFunction<TState, TEvent>;
 
-type StateEffectTuple<TState, TEvent extends EventObject> = [
+type EntityTuple<TState, TEvent extends EventObject> = [
   TState,
   EffectEntity<TState, TEvent>[]
 ];
 
 type AggregatedEffectsState<TState, TEvent extends EventObject> = [
   TState,
-  StateEffectTuple<TState, TEvent>[],
+  EntityTuple<TState, TEvent>[],
   EffectEntity<TState, TEvent>[]
 ];
 
@@ -36,8 +36,15 @@ export interface EventObject {
   [key: string]: any;
 }
 
+enum EntityStatus {
+  Idle,
+  Started,
+  Stopped,
+}
+
 export interface EffectEntity<TState, TEvent extends EventObject> {
   type: string;
+  status: EntityStatus;
   start: (state: TState, dispatch: React.Dispatch<TEvent>) => void;
   stop: () => void;
 }
@@ -49,19 +56,24 @@ function createEffectEntity<
 >(effect: TEffect): EffectEntity<TState, TEvent> {
   let effectCleanup: CleanupFunction | void;
 
-  return {
+  const entity: EffectEntity<TState, TEvent> = {
     type: effect.type,
+    status: EntityStatus.Idle,
     start: (state, dispatch) => {
       if (effect.exec) {
         effectCleanup = effect.exec(state, effect, dispatch);
       }
+      entity.status = EntityStatus.Started;
     },
     stop: () => {
       if (effectCleanup && typeof effectCleanup === 'function') {
         effectCleanup();
       }
+      entity.status = EntityStatus.Stopped;
     },
   };
+
+  return entity;
 }
 
 export interface EffectReducerExec<
@@ -143,6 +155,7 @@ export function useEffectReducer<
   initialState: TState,
   effectsMap?: EffectsMap<TState, TEvent>
 ): [TState, React.Dispatch<TEvent | TEvent['type']>] {
+  const entitiesRef = useRef<Set<EffectEntity<TState, TEvent>>>(new Set());
   const wrappedReducer = (
     [state, stateEffectTuples, entitiesToStop]: AggregatedEffectsState<
       TState,
@@ -198,29 +211,48 @@ export function useEffectReducer<
     dispatch(toEventObject(event));
   }, []);
 
+  // First, stop all effects marked for disposal
   useEffect(() => {
-    // perform cleanup first
     if (entitiesToStop.length) {
       entitiesToStop.forEach(entity => {
         entity.stop();
+        entitiesRef.current.delete(entity);
       });
     }
   }, [entitiesToStop]);
 
+  // Then, execute all effects queued for execution
   useEffect(() => {
     if (effectStateEntityTuples.length) {
       effectStateEntityTuples.forEach(([effectState, effectEntities]) => {
-        effectEntities.forEach(effectEntity => {
-          effectEntity.start(effectState, dispatch);
+        effectEntities.forEach(entity => {
+          if (entity.status !== EntityStatus.Idle) return;
+
+          entitiesRef.current.add(entity);
+          entity.start(effectState, dispatch);
         });
       });
 
+      // Optimization: flush effects that have been executed
+      // so that they no longer needed to be iterated through
       dispatch({
         type: flushEffectsSymbol,
         count: effectStateEntityTuples.length,
       });
     }
   }, [effectStateEntityTuples]);
+
+  // When the component unmounts, stop all effects that are
+  // currently started
+  useEffect(() => {
+    return () => {
+      entitiesRef.current.forEach(entity => {
+        if (entity.status === EntityStatus.Started) {
+          entity.stop();
+        }
+      });
+    };
+  }, []);
 
   return [state, wrappedDispatch];
 }
