@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { useEffect } from 'react';
 
-import { render, cleanup, fireEvent, wait } from '@testing-library/react';
+import { render, cleanup, fireEvent, waitFor } from '@testing-library/react';
 
 import { useEffectReducer, EffectReducer } from '../src';
 
@@ -105,7 +105,7 @@ describe('useEffectReducer', () => {
 
     fireEvent.click(resultEl);
 
-    await wait(() => {
+    await waitFor(() => {
       expect(resultEl.textContent).toEqual('42');
     });
   });
@@ -200,7 +200,7 @@ describe('useEffectReducer', () => {
 
     fireEvent.click(resultEl);
 
-    await wait(() => {
+    await waitFor(() => {
       expect(resultEl.textContent).toEqual('42');
     });
   });
@@ -262,7 +262,9 @@ describe('useEffectReducer', () => {
     const Thing = () => {
       const [hasClicked, setHasClicked] = React.useState(false);
       const [count, dispatch] = useEffectReducer((state, _event, exec) => {
-        exec(() => (effectCount += 1));
+        exec(() => {
+          effectCount += 1;
+        });
         return state + 1;
       }, 0);
 
@@ -292,5 +294,79 @@ describe('useEffectReducer', () => {
 
     expect(getByTestId('count').textContent).toEqual('2');
     expect(effectCount).toEqual(2);
+  });
+
+  it('should run cleanup when effectEntity.stop() is called', async () => {
+    interface ThingContext {
+      count: number;
+      entity?: any;
+    }
+
+    type ThingEvent =
+      | {
+          type: 'INC';
+        }
+      | { type: 'STOP' };
+
+    let started = false;
+    let stopped = false;
+
+    const Thing = () => {
+      const [state, dispatch] = useEffectReducer<ThingContext, ThingEvent>(
+        (state, event, exec) => {
+          if (event.type === 'INC') {
+            if (state.count === 0) {
+              return {
+                count: 1,
+                entity: exec(() => {
+                  started = true;
+
+                  return () => {
+                    console.log('calling stopped');
+                    stopped = true;
+                  };
+                }),
+              };
+            }
+
+            return { ...state, count: state.count + 1 };
+          }
+
+          if (event.type === 'STOP') {
+            exec.stop(state.entity!);
+
+            return state;
+          }
+
+          return state;
+        },
+        { count: 0 }
+      );
+
+      useEffect(() => {
+        dispatch({ type: 'INC' });
+        dispatch({ type: 'INC' });
+        dispatch({ type: 'INC' });
+        dispatch({ type: 'INC' });
+        dispatch({ type: 'INC' });
+
+        setTimeout(() => {
+          dispatch({ type: 'STOP' });
+        }, 10);
+      }, []);
+
+      return <div data-testid="count">{state.count}</div>;
+    };
+
+    const { getByTestId } = render(<Thing />);
+
+    expect(getByTestId('count').textContent).toEqual('5');
+
+    expect(started).toBeTruthy();
+    expect(stopped).toBeFalsy();
+
+    await waitFor(() => {
+      expect(stopped).toBeTruthy();
+    });
   });
 });
