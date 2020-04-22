@@ -22,7 +22,7 @@ type StateEffectTuple<
   TState,
   TEvent,
   TEffect extends EffectObject<TState, TEvent>
-> = [TState, Effect<TState, TEvent, TEffect>[] | undefined] | [TState];
+> = [TState, TEffect[] | undefined] | [TState];
 
 type AggregatedEffectsState<
   TState,
@@ -76,6 +76,23 @@ const toEventObject = <TEvent extends EventObject>(
   return event;
 };
 
+const toEffectObject = <
+  TState,
+  TEvent extends EventObject,
+  TEffect extends EffectObject<TState, TEvent>
+>(
+  effect: TEffect | EffectFunction<TState, TEvent>
+): TEffect => {
+  if (typeof effect === 'function') {
+    return {
+      type: effect.name,
+      exec: effect,
+    } as TEffect;
+  }
+
+  return effect;
+};
+
 export function useEffectReducer<
   TState,
   TEvent extends EventObject,
@@ -89,7 +106,7 @@ export function useEffectReducer<
     [state, effects]: AggregatedEffectsState<TState, TEvent, TEffect>,
     event: TEvent | FlushEvent
   ): AggregatedEffectsState<TState, TEvent, TEffect> => {
-    const nextEffects: Array<Effect<TState, TEvent, TEffect>> = [];
+    const nextEffects: Array<TEffect> = [];
 
     if (event.type === flushEffectsSymbol) {
       // Record that effects have already been executed
@@ -97,7 +114,7 @@ export function useEffectReducer<
     }
 
     const nextState = effectReducer(state, event, effect => {
-      nextEffects.push(effect);
+      nextEffects.push(toEffectObject(effect));
     });
 
     return [
@@ -120,22 +137,15 @@ export function useEffectReducer<
       stateEffectTuples.forEach(([stateForEffect, effects]) => {
         effects?.forEach(effect => {
           let effectImplementation: EffectFunction<TState, TEvent> | undefined;
-          if (typeof effect === 'object' && 'type' in effect) {
-            if (effectsMap && effectsMap[effect.type]) {
-              effectImplementation = effectsMap[effect.type] || effect.exec;
-            } else {
-              effectImplementation = effect.exec;
-            }
-          } else if (typeof effect === 'function') {
-            effectImplementation = effect;
+
+          if (effectsMap && effectsMap[effect.type]) {
+            effectImplementation = effectsMap[effect.type] || effect.exec;
+          } else {
+            effectImplementation = effect.exec;
           }
 
           if (effectImplementation) {
-            effectImplementation(
-              stateForEffect,
-              typeof effect === 'object' ? effect : { type: effect.name },
-              dispatch
-            );
+            effectImplementation(stateForEffect, effect, dispatch);
           }
         });
       });
