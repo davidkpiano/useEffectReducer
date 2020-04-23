@@ -3,7 +3,7 @@ import { useEffect } from 'react';
 
 import { render, cleanup, fireEvent, waitFor } from '@testing-library/react';
 
-import { useEffectReducer, EffectReducer } from '../src';
+import { useEffectReducer, EffectReducer, EffectEntity } from '../src';
 
 // have to add this because someone made a breaking change somewhere...
 class MutationObserver {
@@ -441,5 +441,77 @@ describe('useEffectReducer', () => {
     fireEvent.click(buttonEl);
 
     expect(stopped).toBeTruthy();
+  });
+
+  it('exec.replace() should replace an effect', async () => {
+    const delayedResults: string[] = [];
+
+    type TimerEvent = {
+      type: 'START';
+      delayedMessage: string;
+    };
+
+    interface TimerState {
+      timer?: EffectEntity<TimerState, TimerEvent>;
+    }
+
+    const timerReducer: EffectReducer<TimerState, TimerEvent> = (
+      state,
+      event,
+      exec
+    ) => {
+      if (event.type === 'START') {
+        return {
+          ...state,
+          timer: exec.replace(state.timer, () => {
+            const id = setTimeout(() => {
+              delayedResults.push(event.delayedMessage);
+            }, 100);
+
+            return () => {
+              clearTimeout(id);
+            };
+          }),
+        };
+      }
+
+      return state;
+    };
+
+    const App = () => {
+      const [, dispatch] = useEffectReducer(timerReducer, {});
+
+      return (
+        <div>
+          <button
+            data-testid="send-hello"
+            onClick={() => dispatch({ type: 'START', delayedMessage: 'hello' })}
+          ></button>
+          <button
+            data-testid="send-goodbye"
+            onClick={() =>
+              dispatch({ type: 'START', delayedMessage: 'goodbye' })
+            }
+          ></button>
+        </div>
+      );
+    };
+
+    const { getByTestId } = render(<App />);
+
+    const helloButton = getByTestId('send-hello');
+    const goodbyeButton = getByTestId('send-goodbye');
+
+    fireEvent.click(helloButton);
+
+    setTimeout(() => {
+      fireEvent.click(goodbyeButton);
+    }, 30);
+
+    await waitFor(() => {
+      // If the first timer effect isn't replaced (disposed),
+      // delayedResults will be ['hello', 'goodbye']
+      expect(delayedResults).toEqual(['goodbye']);
+    });
   });
 });

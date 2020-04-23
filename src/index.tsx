@@ -86,6 +86,10 @@ export interface EffectReducerExec<
     TEvent
   >;
   stop: (entity: EffectEntity<TState, TEvent>) => void;
+  replace: (
+    entity: EffectEntity<TState, TEvent> | undefined,
+    effect: TEffect | EffectFunction<TState, TEvent>
+  ) => EffectEntity<TState, TEvent>;
 }
 
 export type EffectReducer<
@@ -171,7 +175,7 @@ export function useEffectReducer<
       return [state, stateEffectTuples.slice(event.count), nextEntitiesToStop];
     }
 
-    const exec = (effect: TEffect) => {
+    const exec = (effect: TEffect | EffectFunction<TState, TEvent>) => {
       const effectObject = toEffectObject(effect, effectsMap);
       const effectEntity = createEffectEntity<TState, TEvent, TEffect>(
         effectObject
@@ -183,6 +187,16 @@ export function useEffectReducer<
 
     exec.stop = (entity: EffectEntity<TState, TEvent>) => {
       nextEntitiesToStop.push(entity);
+    };
+
+    exec.replace = (
+      entity: EffectEntity<TState, TEvent>,
+      effect: TEffect | EffectFunction<TState, TEvent>
+    ) => {
+      if (entity) {
+        nextEntitiesToStop.push(entity);
+      }
+      return exec(effect);
     };
 
     const nextState = effectReducer(
