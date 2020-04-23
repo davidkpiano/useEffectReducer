@@ -11,12 +11,20 @@ If you know how to [`useReducer`](https://reactjs.org/docs/hooks-reference.html#
 <!-- START doctoc generated TOC please keep comment here to allow auto update -->
 <!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
 
+
 - [Installation](#installation)
 - [Quick Start](#quick-start)
 - [Named Effects](#named-effects)
 - [Effect Implementations](#effect-implementations)
+- [Effect Entities](#effect-entities)
+- [Effect Cleanup](#effect-cleanup)
+- [Replacing Effects](#replacing-effects)
+- [String Events](#string-events)
 - [API](#api)
   - [`useEffectReducer` hook](#useeffectreducer-hook)
+  - [`exec(effect)`](#execeffect)
+  - [`exec.stop(entity)`](#execstopentity)
+- [`exec.replace(entity, effect)`](#execreplaceentity-effect)
 - [TypeScript](#typescript)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
@@ -353,6 +361,45 @@ const SomeComponent = () => {
   // ...
 };
 ```
+
+### `exec(effect)`
+
+Used in an effect reducer, `exec(effect)` queues the `effect` for execution and returns an [effect entity](#effect-entities).
+
+The `effect` can either be an effect object:
+
+```js
+// ...
+const entity = exec({
+  type: 'alert',
+  message: 'hello',
+});
+```
+
+Or it can be an inline effect implementation:
+
+```js
+// ...
+const entity = exec(() => {
+  alert('hello');
+});
+```
+
+### `exec.stop(entity)`
+
+Used in an effect reducer, `exec.stop(entity)` stops the effect represented by the `entity`. Returns `void`.
+
+```js
+// Queues the effect entity for disposal
+exec.stop(someEntity);
+```
+
+## `exec.replace(entity, effect)`
+
+Used in an effect reducer, `exec.replace(entity, effect)` does two things:
+
+1. Queues the `entity` for disposal (same as calling `exec.stop(entity)`)
+2. Returns a new [effect entity](#effect-entities) that represents the `effect` that replaces the previous `entity`.
 
 ## TypeScript
 
