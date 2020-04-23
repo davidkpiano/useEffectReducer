@@ -1,9 +1,9 @@
 import * as React from 'react';
 import { useEffect } from 'react';
 
-import { render, cleanup, fireEvent, wait } from '@testing-library/react';
+import { render, cleanup, fireEvent, waitFor } from '@testing-library/react';
 
-import { useEffectReducer, EffectReducer } from '../src';
+import { useEffectReducer, EffectReducer, EffectEntity } from '../src';
 
 // have to add this because someone made a breaking change somewhere...
 class MutationObserver {
@@ -105,7 +105,7 @@ describe('useEffectReducer', () => {
 
     fireEvent.click(resultEl);
 
-    await wait(() => {
+    await waitFor(() => {
       expect(resultEl.textContent).toEqual('42');
     });
   });
@@ -200,7 +200,7 @@ describe('useEffectReducer', () => {
 
     fireEvent.click(resultEl);
 
-    await wait(() => {
+    await waitFor(() => {
       expect(resultEl.textContent).toEqual('42');
     });
   });
@@ -262,7 +262,9 @@ describe('useEffectReducer', () => {
     const Thing = () => {
       const [hasClicked, setHasClicked] = React.useState(false);
       const [count, dispatch] = useEffectReducer((state, _event, exec) => {
-        exec(() => (effectCount += 1));
+        exec(() => {
+          effectCount += 1;
+        });
         return state + 1;
       }, 0);
 
@@ -292,5 +294,224 @@ describe('useEffectReducer', () => {
 
     expect(getByTestId('count').textContent).toEqual('2');
     expect(effectCount).toEqual(2);
+  });
+
+  it('should run cleanup when effectEntity.stop() is called', async () => {
+    interface ThingContext {
+      count: number;
+      entity?: any;
+    }
+
+    type ThingEvent =
+      | {
+          type: 'INC';
+        }
+      | { type: 'STOP' };
+
+    let started = false;
+    let stopped = false;
+
+    const Thing = () => {
+      const [state, dispatch] = useEffectReducer<ThingContext, ThingEvent>(
+        (state, event, exec) => {
+          if (event.type === 'INC') {
+            if (state.count === 0) {
+              return {
+                count: 1,
+                entity: exec(() => {
+                  started = true;
+
+                  return () => {
+                    stopped = true;
+                  };
+                }),
+              };
+            }
+
+            return { ...state, count: state.count + 1 };
+          }
+
+          if (event.type === 'STOP') {
+            exec.stop(state.entity!);
+
+            return state;
+          }
+
+          return state;
+        },
+        { count: 0 }
+      );
+
+      useEffect(() => {
+        dispatch({ type: 'INC' });
+        dispatch({ type: 'INC' });
+        dispatch({ type: 'INC' });
+        dispatch({ type: 'INC' });
+        dispatch({ type: 'INC' });
+
+        setTimeout(() => {
+          dispatch({ type: 'STOP' });
+        }, 10);
+      }, []);
+
+      return <div data-testid="count">{state.count}</div>;
+    };
+
+    const { getByTestId } = render(<Thing />);
+
+    expect(getByTestId('count').textContent).toEqual('5');
+
+    expect(started).toBeTruthy();
+    expect(stopped).toBeFalsy();
+
+    await waitFor(() => {
+      expect(stopped).toBeTruthy();
+    });
+  });
+
+  it('should run cleanup when the component is unmounted', () => {
+    // @ts-ignore
+    let started = false;
+    // @ts-ignore
+    let stopped = false;
+
+    const reducer: EffectReducer<{ status: string }, { type: 'START' }> = (
+      state,
+      event,
+      exec
+    ) => {
+      if (event.type === 'START') {
+        exec(() => {
+          started = true;
+
+          return () => {
+            stopped = true;
+          };
+        });
+
+        return {
+          status: 'started',
+        };
+      }
+
+      return state;
+    };
+
+    const Thing = () => {
+      const [state, dispatch] = useEffectReducer(reducer, { status: 'idle' });
+
+      return (
+        <div
+          data-testid="status"
+          onClick={() => {
+            dispatch('START');
+          }}
+        >
+          {state.status}
+        </div>
+      );
+    };
+
+    const App = () => {
+      const [hidden, setHidden] = React.useState(false);
+
+      return hidden ? null : (
+        <div>
+          <button data-testid="hide" onClick={() => setHidden(true)}></button>
+          <Thing />
+        </div>
+      );
+    };
+
+    const { getByTestId } = render(<App />);
+
+    const statusEl = getByTestId('status');
+    const buttonEl = getByTestId('hide');
+
+    expect(statusEl.textContent).toEqual('idle');
+    expect(started).toBeFalsy();
+
+    fireEvent.click(statusEl);
+
+    expect(started).toBeTruthy();
+    expect(stopped).toBeFalsy();
+
+    expect(statusEl.textContent).toEqual('started');
+
+    fireEvent.click(buttonEl);
+
+    expect(stopped).toBeTruthy();
+  });
+
+  it('exec.replace() should replace an effect', async () => {
+    const delayedResults: string[] = [];
+
+    type TimerEvent = {
+      type: 'START';
+      delayedMessage: string;
+    };
+
+    interface TimerState {
+      timer?: EffectEntity<TimerState, TimerEvent>;
+    }
+
+    const timerReducer: EffectReducer<TimerState, TimerEvent> = (
+      state,
+      event,
+      exec
+    ) => {
+      if (event.type === 'START') {
+        return {
+          ...state,
+          timer: exec.replace(state.timer, () => {
+            const id = setTimeout(() => {
+              delayedResults.push(event.delayedMessage);
+            }, 100);
+
+            return () => {
+              clearTimeout(id);
+            };
+          }),
+        };
+      }
+
+      return state;
+    };
+
+    const App = () => {
+      const [, dispatch] = useEffectReducer(timerReducer, {});
+
+      return (
+        <div>
+          <button
+            data-testid="send-hello"
+            onClick={() => dispatch({ type: 'START', delayedMessage: 'hello' })}
+          ></button>
+          <button
+            data-testid="send-goodbye"
+            onClick={() =>
+              dispatch({ type: 'START', delayedMessage: 'goodbye' })
+            }
+          ></button>
+        </div>
+      );
+    };
+
+    const { getByTestId } = render(<App />);
+
+    const helloButton = getByTestId('send-hello');
+    const goodbyeButton = getByTestId('send-goodbye');
+
+    fireEvent.click(helloButton);
+
+    setTimeout(() => {
+      fireEvent.click(goodbyeButton);
+    }, 30);
+
+    await waitFor(() => {
+      // If the first timer effect isn't replaced (disposed),
+      // delayedResults will be ['hello', 'goodbye']
+      expect(delayedResults).toEqual(['goodbye']);
+    });
   });
 });

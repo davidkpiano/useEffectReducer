@@ -1,10 +1,12 @@
-import { useReducer, useEffect, useCallback } from 'react';
+import { useReducer, useEffect, useCallback, useRef } from 'react';
+
+type CleanupFunction = () => void;
 
 export type EffectFunction<TState, TEvent> = (
   state: TState,
   effect: EffectObject<TState, TEvent>,
   dispatch: React.Dispatch<TEvent>
-) => void;
+) => CleanupFunction | void;
 
 export interface EffectObject<TState, TEvent> {
   [key: string]: any;
@@ -18,21 +20,76 @@ export type Effect<
   TEffect extends EffectObject<TState, TEvent>
 > = TEffect | EffectFunction<TState, TEvent>;
 
-type StateEffectTuple<
+type EntityTuple<TState, TEvent extends EventObject> = [
   TState,
-  TEvent,
-  TEffect extends EffectObject<TState, TEvent>
-> = [TState, TEffect[] | undefined] | [TState];
+  EffectEntity<TState, TEvent>[]
+];
 
-type AggregatedEffectsState<
+type AggregatedEffectsState<TState, TEvent extends EventObject> = [
   TState,
-  TEvent,
-  TEffect extends EffectObject<TState, TEvent>
-> = [TState, StateEffectTuple<TState, TEvent, TEffect>[]];
+  EntityTuple<TState, TEvent>[],
+  EffectEntity<TState, TEvent>[]
+];
 
 export interface EventObject {
   type: string;
   [key: string]: any;
+}
+
+enum EntityStatus {
+  Idle,
+  Started,
+  Stopped,
+}
+
+export interface EffectEntity<TState, TEvent extends EventObject> {
+  type: string;
+  status: EntityStatus;
+  start: (state: TState, dispatch: React.Dispatch<TEvent>) => void;
+  stop: () => void;
+}
+
+function createEffectEntity<
+  TState,
+  TEvent extends EventObject,
+  TEffect extends EffectObject<TState, TEvent>
+>(effect: TEffect): EffectEntity<TState, TEvent> {
+  let effectCleanup: CleanupFunction | void;
+
+  const entity: EffectEntity<TState, TEvent> = {
+    type: effect.type,
+    status: EntityStatus.Idle,
+    start: (state, dispatch) => {
+      if (effect.exec) {
+        effectCleanup = effect.exec(state, effect, dispatch);
+      }
+      entity.status = EntityStatus.Started;
+    },
+    stop: () => {
+      if (effectCleanup && typeof effectCleanup === 'function') {
+        effectCleanup();
+      }
+      entity.status = EntityStatus.Stopped;
+    },
+  };
+
+  return entity;
+}
+
+export interface EffectReducerExec<
+  TState,
+  TEvent extends EventObject,
+  TEffect extends EffectObject<TState, TEvent>
+> {
+  (effect: TEffect | EffectFunction<TState, TEvent>): EffectEntity<
+    TState,
+    TEvent
+  >;
+  stop: (entity: EffectEntity<TState, TEvent>) => void;
+  replace: (
+    entity: EffectEntity<TState, TEvent> | undefined,
+    effect: TEffect | EffectFunction<TState, TEvent>
+  ) => EffectEntity<TState, TEvent>;
 }
 
 export type EffectReducer<
@@ -42,7 +99,7 @@ export type EffectReducer<
 > = (
   state: TState,
   event: TEvent,
-  exec: (effect: TEffect | EffectFunction<TState, TEvent>) => void
+  exec: EffectReducerExec<TState, TEvent, TEffect>
 ) => TState;
 
 const flushEffectsSymbol = Symbol();
@@ -81,16 +138,16 @@ const toEffectObject = <
   TEvent extends EventObject,
   TEffect extends EffectObject<TState, TEvent>
 >(
-  effect: TEffect | EffectFunction<TState, TEvent>
+  effect: TEffect | EffectFunction<TState, TEvent>,
+  effectsMap?: EffectsMap<TState, TEvent>
 ): TEffect => {
-  if (typeof effect === 'function') {
-    return {
-      type: effect.name,
-      exec: effect,
-    } as TEffect;
-  }
+  const type = typeof effect === 'function' ? effect.name : effect.type;
+  const customExec = effectsMap ? effectsMap[type] : undefined;
+  const exec =
+    customExec || (typeof effect === 'function' ? effect : effect.exec);
+  const other = typeof effect === 'function' ? {} : effect;
 
-  return effect;
+  return { ...other, type, exec } as TEffect;
 };
 
 export function useEffectReducer<
@@ -102,57 +159,114 @@ export function useEffectReducer<
   initialState: TState,
   effectsMap?: EffectsMap<TState, TEvent>
 ): [TState, React.Dispatch<TEvent | TEvent['type']>] {
+  const entitiesRef = useRef<Set<EffectEntity<TState, TEvent>>>(new Set());
   const wrappedReducer = (
-    [state, effects]: AggregatedEffectsState<TState, TEvent, TEffect>,
+    [state, stateEffectTuples, entitiesToStop]: AggregatedEffectsState<
+      TState,
+      TEvent
+    >,
     event: TEvent | FlushEvent
-  ): AggregatedEffectsState<TState, TEvent, TEffect> => {
-    const nextEffects: Array<TEffect> = [];
+  ): AggregatedEffectsState<TState, TEvent> => {
+    const nextEffectEntities: Array<EffectEntity<TState, TEvent>> = [];
+    const nextEntitiesToStop: Array<EffectEntity<TState, TEvent>> = [];
 
     if (event.type === flushEffectsSymbol) {
       // Record that effects have already been executed
-      return [state, effects.slice(event.count)];
+      return [state, stateEffectTuples.slice(event.count), nextEntitiesToStop];
     }
 
-    const nextState = effectReducer(state, event, effect => {
-      nextEffects.push(toEffectObject(effect));
-    });
+    const exec = (effect: TEffect | EffectFunction<TState, TEvent>) => {
+      const effectObject = toEffectObject(effect, effectsMap);
+      const effectEntity = createEffectEntity<TState, TEvent, TEffect>(
+        effectObject
+      );
+      nextEffectEntities.push(effectEntity);
+
+      return effectEntity;
+    };
+
+    exec.stop = (entity: EffectEntity<TState, TEvent>) => {
+      nextEntitiesToStop.push(entity);
+    };
+
+    exec.replace = (
+      entity: EffectEntity<TState, TEvent>,
+      effect: TEffect | EffectFunction<TState, TEvent>
+    ) => {
+      if (entity) {
+        nextEntitiesToStop.push(entity);
+      }
+      return exec(effect);
+    };
+
+    const nextState = effectReducer(
+      state,
+      event,
+      exec as EffectReducerExec<TState, TEvent, TEffect>
+    );
 
     return [
       nextState,
-      nextEffects.length ? [...effects, [nextState, nextEffects]] : effects,
+      nextEffectEntities.length
+        ? [...stateEffectTuples, [nextState, nextEffectEntities]]
+        : stateEffectTuples,
+      entitiesToStop.length
+        ? [...entitiesToStop, ...nextEntitiesToStop]
+        : nextEntitiesToStop,
     ];
   };
 
-  const [[state, stateEffectTuples], dispatch] = useReducer(wrappedReducer, [
-    initialState,
-    [],
-  ]);
+  const [
+    [state, effectStateEntityTuples, entitiesToStop],
+    dispatch,
+  ] = useReducer(wrappedReducer, [initialState, [], []]);
 
   const wrappedDispatch = useCallback((event: TEvent | TEvent['type']) => {
     dispatch(toEventObject(event));
   }, []);
 
+  // First, stop all effects marked for disposal
   useEffect(() => {
-    if (stateEffectTuples.length) {
-      stateEffectTuples.forEach(([stateForEffect, effects]) => {
-        effects?.forEach(effect => {
-          let effectImplementation: EffectFunction<TState, TEvent> | undefined;
+    if (entitiesToStop.length) {
+      entitiesToStop.forEach(entity => {
+        entity.stop();
+        entitiesRef.current.delete(entity);
+      });
+    }
+  }, [entitiesToStop]);
 
-          if (effectsMap && effectsMap[effect.type]) {
-            effectImplementation = effectsMap[effect.type] || effect.exec;
-          } else {
-            effectImplementation = effect.exec;
-          }
+  // Then, execute all effects queued for execution
+  useEffect(() => {
+    if (effectStateEntityTuples.length) {
+      effectStateEntityTuples.forEach(([effectState, effectEntities]) => {
+        effectEntities.forEach(entity => {
+          if (entity.status !== EntityStatus.Idle) return;
 
-          if (effectImplementation) {
-            effectImplementation(stateForEffect, effect, dispatch);
-          }
+          entitiesRef.current.add(entity);
+          entity.start(effectState, dispatch);
         });
       });
 
-      dispatch({ type: flushEffectsSymbol, count: stateEffectTuples.length });
+      // Optimization: flush effects that have been executed
+      // so that they no longer needed to be iterated through
+      dispatch({
+        type: flushEffectsSymbol,
+        count: effectStateEntityTuples.length,
+      });
     }
-  }, [stateEffectTuples]);
+  }, [effectStateEntityTuples]);
+
+  // When the component unmounts, stop all effects that are
+  // currently started
+  useEffect(() => {
+    return () => {
+      entitiesRef.current.forEach(entity => {
+        if (entity.status === EntityStatus.Started) {
+          entity.stop();
+        }
+      });
+    };
+  }, []);
 
   return [state, wrappedDispatch];
 }
