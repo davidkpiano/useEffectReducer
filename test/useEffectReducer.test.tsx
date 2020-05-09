@@ -45,10 +45,15 @@ describe('useEffectReducer', () => {
       user: string;
     };
 
+    type CrazeEffect = {
+      type: 'goCrazy';
+      id: number;
+    };
+
     const fetchEffectReducer: EffectReducer<
       FetchState,
       FetchEvent,
-      FetchEffect
+      FetchEffect | CrazeEffect
     > = (state, event, exec) => {
       switch (event.type) {
         case 'FETCH':
@@ -72,7 +77,7 @@ describe('useEffectReducer', () => {
         fetchEffectReducer,
         { status: 'idle', user: undefined },
         {
-          fetchFromAPI(_, effect) {
+          fetchFromAPI(_, effect: FetchEffect) {
             setTimeout(() => {
               dispatch({
                 type: 'RESOLVE',
@@ -80,6 +85,7 @@ describe('useEffectReducer', () => {
               });
             }, 100);
           },
+          goCrazy(_, fx: CrazeEffect) {},
         }
       );
 
