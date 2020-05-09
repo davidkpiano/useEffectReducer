@@ -16,6 +16,7 @@ If you know how to [`useReducer`](https://reactjs.org/docs/hooks-reference.html#
 - [Quick Start](#quick-start)
 - [Named Effects](#named-effects)
 - [Effect Implementations](#effect-implementations)
+- [Initial Effects](#initial-effects)
 - [Effect Entities](#effect-entities)
 - [Effect Cleanup](#effect-cleanup)
 - [Replacing Effects](#replacing-effects)
@@ -216,6 +217,43 @@ const [state, dispatch] = useEffectReducer(someReducer, initialState, {
 });
 ```
 
+## Initial Effects
+
+The 2nd argument to `useEffectReducer(state, initialState)` can either be a static `initialState` or a function that takes in an effect `exec` function and returns the `initialState`:
+
+```js
+const fetchReducer = (state, event) => {
+  if (event.type === 'RESOLVE') {
+    return {
+      ...state,
+      data: event.data,
+    };
+  }
+
+  return state;
+};
+
+const getInitialState = exec => {
+  exec({ type: 'fetchData', someQuery: '*' });
+
+  return { data: null };
+};
+
+// (in the component)
+const [state, dispatch] = useEffectReducer(fetchReducer, getInitialState, {
+  fetchData(_, { someQuery }) {
+    fetch(`/some/api?${someQuery}`)
+      .then(res => res.json())
+      .then(data => {
+        dispatch({
+          type: 'RESOLVE',
+          data,
+        });
+      });
+  },
+});
+```
+
 ## Effect Entities
 
 The `exec(effect)` function returns an **effect entity**, which is a special object that represents the running effect. These objects can be stored directly in the reducer's state:
@@ -343,6 +381,27 @@ The `useEffectReducer` hook takes the same first 2 arguments as the built-in `us
 ```js
 const SomeComponent = () => {
   const [state, dispatch] = useEffectReducer(someEffectReducer, initialState);
+
+  // ...
+};
+```
+
+The 2nd argument to `useEffectReducer(...)` can either be a static `initialState` or a function that takes in `exec` and returns an `initialState` (with executed initial effects). See [Initial Effects](#initial-effects) for more information.
+
+```js
+const SomeComponent = () => {
+  const [state, dispatch] = useEffectReducer(
+    someEffectReducer,
+    exec => {
+      exec({ type: 'someEffect' });
+      return someInitialState;
+    },
+    {
+      someEffect(state, effect) {
+        // ...
+      },
+    }
+  );
 
   // ...
 };
