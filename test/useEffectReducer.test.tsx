@@ -3,7 +3,12 @@ import { useEffect } from 'react';
 
 import { render, cleanup, fireEvent, waitFor } from '@testing-library/react';
 
-import { useEffectReducer, EffectReducer, EffectEntity } from '../src';
+import {
+  useEffectReducer,
+  EffectReducer,
+  EffectEntity,
+  InitialEffectStateGetter,
+} from '../src';
 
 // have to add this because someone made a breaking change somewhere...
 class MutationObserver {
@@ -80,7 +85,7 @@ describe('useEffectReducer', () => {
             setTimeout(() => {
               dispatch({
                 type: 'RESOLVE',
-                data: effect.user,
+                data: { name: effect.user },
               });
             }, 100);
           },
@@ -92,7 +97,7 @@ describe('useEffectReducer', () => {
           onClick={() => dispatch({ type: 'FETCH', user: '42' })}
           data-testid="result"
         >
-          {state.user ? state.user : '--'}
+          {state.user ? state.user.name : '--'}
         </div>
       );
     };
@@ -175,7 +180,7 @@ describe('useEffectReducer', () => {
             setTimeout(() => {
               _dispatch({
                 type: 'RESOLVE',
-                data: effect.user,
+                data: { name: effect.user },
               });
             }, 100);
           },
@@ -187,7 +192,7 @@ describe('useEffectReducer', () => {
           onClick={() => dispatch({ type: 'FETCH', user: '42' })}
           data-testid="result"
         >
-          {state.user ? state.user : '--'}
+          {state.user ? state.user.name : '--'}
         </div>
       );
     };
@@ -512,6 +517,70 @@ describe('useEffectReducer', () => {
       // If the first timer effect isn't replaced (disposed),
       // delayedResults will be ['hello', 'goodbye']
       expect(delayedResults).toEqual(['goodbye']);
+    });
+  });
+
+  it('should allow for initial effects', async () => {
+    interface FetchState {
+      data: null | string;
+    }
+
+    type FetchEvent = {
+      type: 'RESOLVE';
+      data: string;
+    };
+
+    type FetchEffects = {
+      type: 'fetchData';
+      data: string;
+    };
+
+    const fetchReducer: EffectReducer<FetchState, FetchEvent, FetchEffects> = (
+      state,
+      event
+    ) => {
+      if (event.type === 'RESOLVE') {
+        return {
+          ...state,
+          data: event.data,
+        };
+      }
+
+      return state;
+    };
+
+    const getInitialState: InitialEffectStateGetter<
+      FetchState,
+      FetchEffects
+    > = exec => {
+      exec({ type: 'fetchData', data: 'secret' });
+
+      return { data: null };
+    };
+
+    const App = () => {
+      const [state, dispatch] = useEffectReducer(
+        fetchReducer,
+        getInitialState,
+        {
+          fetchData(_, { data }) {
+            setTimeout(() => {
+              dispatch({ type: 'RESOLVE', data: data.toUpperCase() });
+            }, 20);
+          },
+        }
+      );
+
+      return <div data-testid="result">{state.data || '--'}</div>;
+    };
+
+    const { getByTestId } = render(<App />);
+    const result = getByTestId('result');
+
+    expect(result.textContent).toEqual('--');
+
+    await waitFor(() => {
+      expect(result.textContent).toEqual('SECRET');
     });
   });
 });
