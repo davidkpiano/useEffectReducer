@@ -16,10 +16,6 @@ describe('useEffectReducer', () => {
   afterEach(cleanup);
 
   it('basic example', async () => {
-    interface User {
-      name: string;
-    }
-
     type FetchState =
       | {
           status: 'idle';
@@ -27,11 +23,11 @@ describe('useEffectReducer', () => {
         }
       | {
           status: 'fetching';
-          user: User | undefined;
+          user: string | undefined;
         }
       | {
           status: 'fulfilled';
-          user: User;
+          user: string;
         };
 
     type FetchEvent =
@@ -41,7 +37,7 @@ describe('useEffectReducer', () => {
         }
       | {
           type: 'RESOLVE';
-          data: User;
+          data: string;
         };
 
     type FetchEffect = {
@@ -111,10 +107,6 @@ describe('useEffectReducer', () => {
   });
 
   it('third argument dispatch', async () => {
-    interface User {
-      name: string;
-    }
-
     type FetchState =
       | {
           status: 'idle';
@@ -122,11 +114,11 @@ describe('useEffectReducer', () => {
         }
       | {
           status: 'fetching';
-          user: User | undefined;
+          user: string | undefined;
         }
       | {
           status: 'fulfilled';
-          user: User;
+          user: string;
         };
 
     type FetchEvent =
@@ -136,7 +128,7 @@ describe('useEffectReducer', () => {
         }
       | {
           type: 'RESOLVE';
-          data: User;
+          data: string;
         };
 
     type FetchEffect = {

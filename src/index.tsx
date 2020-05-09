@@ -2,9 +2,16 @@ import { useReducer, useEffect, useCallback, useRef } from 'react';
 
 type CleanupFunction = () => void;
 
-export type EffectFunction<TState, TEvent> = (
+export type EffectFunction<
+  TState,
+  TEvent,
+  TEffectObject extends EffectObject<TState, TEvent> = EffectObject<
+    TState,
+    TEvent
+  >
+> = (
   state: TState,
-  effect: EffectObject<TState, TEvent>,
+  effect: TEffectObject,
   dispatch: React.Dispatch<TEvent>
 ) => CleanupFunction | void;
 
@@ -119,9 +126,14 @@ export function toEffect<TState, TEvent>(
   };
 }
 
-interface EffectsMap<TState, TEvent> {
-  [key: string]: EffectFunction<TState, TEvent>;
-}
+type EffectsMap<
+  TState,
+  TEvent,
+  TFxObject extends EffectObject<TState, TEvent>,
+  Keys extends TFxObject['type'] = TFxObject['type']
+> = {
+  [K in Keys]: EffectFunction<TState, TEvent, TFxObject>;
+};
 
 const toEventObject = <TEvent extends EventObject>(
   event: TEvent['type'] | TEvent
@@ -138,11 +150,17 @@ const toEffectObject = <
   TEvent extends EventObject,
   TEffect extends EffectObject<TState, TEvent>
 >(
-  effect: TEffect | EffectFunction<TState, TEvent>,
-  effectsMap?: EffectsMap<TState, TEvent>
+  effect: TEffect | EffectFunction<TState, TEvent, TEffect>,
+  effectsMap?: EffectsMap<TState, TEvent, TEffect>
 ): TEffect => {
   const type = typeof effect === 'function' ? effect.name : effect.type;
-  const customExec = effectsMap ? effectsMap[type] : undefined;
+  const customExec = effectsMap
+    ? ((effectsMap as any)[type as string] as EffectFunction<
+        TState,
+        TEvent,
+        TEffect
+      >)
+    : undefined;
   const exec =
     customExec || (typeof effect === 'function' ? effect : effect.exec);
   const other = typeof effect === 'function' ? {} : effect;
@@ -157,7 +175,7 @@ export function useEffectReducer<
 >(
   effectReducer: EffectReducer<TState, TEvent, TEffect>,
   initialState: TState,
-  effectsMap?: EffectsMap<TState, TEvent>
+  effectsMap?: EffectsMap<TState, TEvent, TEffect>
 ): [TState, React.Dispatch<TEvent | TEvent['type']>] {
   const entitiesRef = useRef<Set<EffectEntity<TState, TEvent>>>(new Set());
   const wrappedReducer = (
