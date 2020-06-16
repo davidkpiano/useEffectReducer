@@ -1,5 +1,12 @@
 # use-effect-reducer
 
+## 0.6.1
+
+### Patch Changes
+
+- Fixed the `module` entry in `package.json`.
+- Fixed the `module` entry in `package.json`
+
 ## 0.6.0
 
 ### Minor Changes
