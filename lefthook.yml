@@ -1,0 +1,8 @@
+pre-commit:
+  commands:
+    lint:
+      files: git diff --name-only @{push}
+      glob: "*.{ts,tsx,js,jsx}"
+      run: tsdx lint {staged_files}
+    doctoc:
+      run: "doctoc README.md"
