@@ -181,63 +181,70 @@ export function useEffectReducer<
   effectsMap?: EffectsMap<TState, TEvent, TEffect>
 ): [TState, React.Dispatch<TEvent | TEvent['type']>] {
   const entitiesRef = useRef<Set<EffectEntity<TState, TEvent>>>(new Set());
-  const wrappedReducer = (
-    [state, stateEffectTuples, entitiesToStop]: AggregatedEffectsState<
-      TState,
-      TEvent
-    >,
-    event: TEvent | FlushEvent
-  ): AggregatedEffectsState<TState, TEvent> => {
-    const nextEffectEntities: Array<EffectEntity<TState, TEvent>> = [];
-    const nextEntitiesToStop: Array<EffectEntity<TState, TEvent>> = [];
+  const wrappedReducer = useMemo(
+    () => (
+      [state, stateEffectTuples, entitiesToStop]: AggregatedEffectsState<
+        TState,
+        TEvent
+      >,
+      event: TEvent | FlushEvent
+    ): AggregatedEffectsState<TState, TEvent> => {
+      const nextEffectEntities: Array<EffectEntity<TState, TEvent>> = [];
+      const nextEntitiesToStop: Array<EffectEntity<TState, TEvent>> = [];
 
-    if (event.type === flushEffectsSymbol) {
-      // Record that effects have already been executed
-      return [state, stateEffectTuples.slice(event.count), nextEntitiesToStop];
-    }
-
-    const exec = (
-      effect: TEffect | EffectFunction<TState, TEvent, TEffect>
-    ) => {
-      const effectObject = toEffectObject(effect, effectsMap);
-      const effectEntity = createEffectEntity<TState, TEvent, TEffect>(
-        effectObject
-      );
-      nextEffectEntities.push(effectEntity);
-
-      return effectEntity;
-    };
-
-    exec.stop = (entity: EffectEntity<TState, TEvent>) => {
-      nextEntitiesToStop.push(entity);
-    };
-
-    exec.replace = (
-      entity: EffectEntity<TState, TEvent>,
-      effect: TEffect | EffectFunction<TState, TEvent, TEffect>
-    ) => {
-      if (entity) {
-        nextEntitiesToStop.push(entity);
+      if (event.type === flushEffectsSymbol) {
+        // Record that effects have already been executed
+        return [
+          state,
+          stateEffectTuples.slice(event.count),
+          nextEntitiesToStop,
+        ];
       }
-      return exec(effect);
-    };
 
-    const nextState = effectReducer(
-      state,
-      event,
-      exec as EffectReducerExec<TState, TEvent, TEffect>
-    );
+      const exec = (
+        effect: TEffect | EffectFunction<TState, TEvent, TEffect>
+      ) => {
+        const effectObject = toEffectObject(effect, effectsMap);
+        const effectEntity = createEffectEntity<TState, TEvent, TEffect>(
+          effectObject
+        );
+        nextEffectEntities.push(effectEntity);
 
-    return [
-      nextState,
-      nextEffectEntities.length
-        ? [...stateEffectTuples, [nextState, nextEffectEntities]]
-        : stateEffectTuples,
-      entitiesToStop.length
-        ? [...entitiesToStop, ...nextEntitiesToStop]
-        : nextEntitiesToStop,
-    ];
-  };
+        return effectEntity;
+      };
+
+      exec.stop = (entity: EffectEntity<TState, TEvent>) => {
+        nextEntitiesToStop.push(entity);
+      };
+
+      exec.replace = (
+        entity: EffectEntity<TState, TEvent>,
+        effect: TEffect | EffectFunction<TState, TEvent, TEffect>
+      ) => {
+        if (entity) {
+          nextEntitiesToStop.push(entity);
+        }
+        return exec(effect);
+      };
+
+      const nextState = effectReducer(
+        state,
+        event,
+        exec as EffectReducerExec<TState, TEvent, TEffect>
+      );
+
+      return [
+        nextState,
+        nextEffectEntities.length
+          ? [...stateEffectTuples, [nextState, nextEffectEntities]]
+          : stateEffectTuples,
+        entitiesToStop.length
+          ? [...entitiesToStop, ...nextEntitiesToStop]
+          : nextEntitiesToStop,
+      ];
+    },
+    []
+  );
 
   const initialStateAndEffects: AggregatedEffectsState<
     TState,
