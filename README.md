@@ -73,6 +73,33 @@ const [state, dispatch] = useEffectReducer(someEffectReducer, initialState, {
 dispatch({ type: 'FETCH', user: 'Sophie' });
 ```
 
+## Isn't this unsafe?
+
+No - internally, `useEffectReducer` (as the name implies) is abstracting this pattern:
+
+```js
+// pseudocode
+const myReducer = ([state], event) => {
+  const effects = [];
+  const exec = (effect) => effects.push(effect);
+  
+  const nextState = // calculate next state
+  
+  return [nextState, effects];
+}
+
+// in your component
+const [allState, dispatch] = useReducer(myReducer);
+
+useEffect(() => {
+  allState.effects.forEach(effect => {
+    // execute the effect
+  });
+}, [allState.effects]);
+```
+
+Instead of being implicit about which effects are executed and _when_ they are executed, you make this explicit in the "effect reducer" with the helper `exec` function. Then, the `useEffectReducer` hook will take the pending effects and properly execute them within a `useEffect()` hook.
+
 ## Quick Start
 
 An "effect reducer" takes 3 arguments:
