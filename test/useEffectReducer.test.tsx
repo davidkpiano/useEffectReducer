@@ -523,6 +523,7 @@ describe('useEffectReducer', () => {
   it('should allow for initial effects', async () => {
     interface FetchState {
       data: null | string;
+      effect: EffectEntity<FetchState, FetchEvent>;
     }
 
     type FetchEvent = {
@@ -530,16 +531,21 @@ describe('useEffectReducer', () => {
       data: string;
     };
 
-    type FetchEffects = {
-      type: 'fetchData';
-      data: string;
-    };
+    type FetchEffects =
+      | {
+          type: 'fetchData';
+          data: string;
+        }
+      | {
+          type: 'effect';
+        };
 
     const fetchReducer: EffectReducer<FetchState, FetchEvent, FetchEffects> = (
       state,
       event
     ) => {
       if (event.type === 'RESOLVE') {
+        state.effect.stop();
         return {
           ...state,
           data: event.data,
@@ -551,12 +557,19 @@ describe('useEffectReducer', () => {
 
     const getInitialState: InitialEffectStateGetter<
       FetchState,
+      FetchEvent,
       FetchEffects
     > = exec => {
       exec({ type: 'fetchData', data: 'secret' });
+      const effect = exec({ type: 'effect' });
 
-      return { data: null };
+      return { data: null, effect };
     };
+
+    //@ts-ignore
+    let started = false;
+    //@ts-ignore
+    let stopped = false;
 
     const App = () => {
       const [state, dispatch] = useEffectReducer(
@@ -568,6 +581,13 @@ describe('useEffectReducer', () => {
               dispatch({ type: 'RESOLVE', data: data.toUpperCase() });
             }, 20);
           },
+          effect() {
+            started = true;
+
+            return () => {
+              stopped = true;
+            };
+          },
         }
       );
 
@@ -575,12 +595,14 @@ describe('useEffectReducer', () => {
     };
 
     const { getByTestId } = render(<App />);
+    expect(started).toBeTruthy();
     const result = getByTestId('result');
 
     expect(result.textContent).toEqual('--');
 
     await waitFor(() => {
       expect(result.textContent).toEqual('SECRET');
+      expect(stopped).toBeTruthy();
     });
   });
 });
