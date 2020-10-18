@@ -551,6 +551,7 @@ describe('useEffectReducer', () => {
 
     const getInitialState: InitialEffectStateGetter<
       FetchState,
+      FetchEvent,
       FetchEffects
     > = exec => {
       exec({ type: 'fetchData', data: 'secret' });

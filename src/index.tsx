@@ -166,9 +166,12 @@ const toEffectObject = <
 
 export type InitialEffectStateGetter<
   TState,
+  TEvent extends EventObject,
   TEffect extends EffectObject<TState, any>
 > = (
-  exec: (effect: TEffect | EffectFunction<TState, any, TEffect>) => void
+  exec: (
+    effect: TEffect | EffectFunction<TState, any, TEffect>
+  ) => EffectEntity<TState, TEvent>
 ) => TState;
 
 export function useEffectReducer<
@@ -177,7 +180,7 @@ export function useEffectReducer<
   TEffect extends EffectObject<TState, TEvent> = EffectObject<TState, TEvent>
 >(
   effectReducer: EffectReducer<TState, TEvent, TEffect>,
-  initialState: TState | InitialEffectStateGetter<TState, TEffect>,
+  initialState: TState | InitialEffectStateGetter<TState, TEvent, TEffect>,
   effectsMap?: EffectsMap<TState, TEvent, TEffect>
 ): [TState, React.Dispatch<TEvent | TEvent['type']>] {
   const entitiesRef = useRef<Set<EffectEntity<TState, TEvent>>>(new Set());
@@ -248,6 +251,7 @@ export function useEffectReducer<
 
       const resolvedInitialState = (initialState as InitialEffectStateGetter<
         TState,
+        TEvent,
         TEffect
       >)(effect => {
         const effectObject = toEffectObject(effect, effectsMap);
@@ -256,6 +260,7 @@ export function useEffectReducer<
         );
 
         initialEffectEntities.push(effectEntity);
+        return effectEntity;
       });
 
       return [
