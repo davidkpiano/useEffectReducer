@@ -1,5 +1,11 @@
 # use-effect-reducer
 
+## 0.7.0
+
+### Minor Changes
+
+- 7ec8494: Initial effects now support cleanup, just like normal effects. https://github.com/davidkpiano/useEffectReducer/pull/20
+
 ## 0.6.1
 
 ### Patch Changes
