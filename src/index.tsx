@@ -243,7 +243,7 @@ export function useEffectReducer<
           : nextEntitiesToStop,
       ];
     },
-    []
+    [effectReducer, effectsMap]
   );
 
   const initialStateAndEffects: AggregatedEffectsState<
