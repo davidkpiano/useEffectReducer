@@ -58,7 +58,7 @@ const someEffectReducer = (state, event, exec) => {
   // ...
 
   return state;
-});
+};
 ```
 
 [Use it:](#quick-start)
