@@ -278,8 +278,20 @@ export function useEffectReducer<
     dispatch,
   ] = useReducer(wrappedReducer, initialStateAndEffects);
 
+  const isMounted = useRef<boolean>(false);
+
+  useEffect(() => {
+    isMounted.current = true;
+
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
+
   const wrappedDispatch = useCallback((event: TEvent | TEvent['type']) => {
-    dispatch(toEventObject(event));
+    if (!!isMounted.current) {
+      dispatch(toEventObject(event));
+    }
   }, []);
 
   // First, stop all effects marked for disposal
@@ -300,13 +312,13 @@ export function useEffectReducer<
           if (entity.status !== EntityStatus.Idle) return;
 
           entitiesRef.current.add(entity);
-          entity.start(effectState, dispatch);
+          entity.start(effectState, wrappedDispatch);
         });
       });
 
       // Optimization: flush effects that have been executed
       // so that they no longer needed to be iterated through
-      dispatch({
+      wrappedDispatch({
         type: flushEffectsSymbol,
         count: effectStateEntityTuples.length,
       });
