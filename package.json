@@ -49,13 +49,13 @@
   "devDependencies": {
     "@arkweid/lefthook": "^0.7.2",
     "@changesets/cli": "^2.6.5",
-    "@testing-library/react": "^10.0.2",
+    "@testing-library/react": "^11.2.7",
     "@types/jest": "^25.2.1",
     "@types/react": "^16.9.32",
     "@types/react-dom": "^16.9.6",
     "doctoc": "^1.4.0",
-    "react": "^16.13.1",
-    "react-dom": "^16.13.1",
+    "react": "^18.0.0-alpha-01be61c12",
+    "react-dom": "^18.0.0-alpha-01be61c12",
     "tsdx": "^0.13.1",
     "tslib": "^1.11.1",
     "typescript": "^4.0.3"
