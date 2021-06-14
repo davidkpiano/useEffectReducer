@@ -89,13 +89,13 @@ const myReducer = ([state], event) => {
 }
 
 // in your component
-const [allState, dispatch] = useReducer(myReducer);
+const [[state, effects], dispatch] = useReducer(myReducer);
 
 useEffect(() => {
-  allState.effects.forEach(effect => {
+  effects.forEach(effect => {
     // execute the effect
   });
-}, [allState.effects]);
+}, [effects]);
 ```
 
 Instead of being implicit about which effects are executed and _when_ they are executed, you make this explicit in the "effect reducer" with the helper `exec` function. Then, the `useEffectReducer` hook will take the pending effects and properly execute them within a `useEffect()` hook.
