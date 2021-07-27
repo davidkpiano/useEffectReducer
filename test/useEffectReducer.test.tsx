@@ -605,4 +605,102 @@ describe('useEffectReducer', () => {
       expect(stopped).toBeTruthy();
     });
   });
+
+  it('should work with useLayoutEffect', async () => {
+    interface User {
+      name: string;
+    }
+
+    type FetchState =
+      | {
+          status: 'idle';
+          user: undefined;
+        }
+      | {
+          status: 'fetching';
+          user: User | undefined;
+        }
+      | {
+          status: 'fulfilled';
+          user: User;
+        };
+
+    type FetchEvent =
+      | {
+          type: 'FETCH';
+          user: string;
+        }
+      | {
+          type: 'RESOLVE';
+          data: User;
+        };
+
+    type FetchEffect = {
+      type: 'fetchFromAPI';
+      user: string;
+    };
+
+    const fetchEffectReducer: EffectReducer<
+      FetchState,
+      FetchEvent,
+      FetchEffect
+    > = (state, event, exec) => {
+      switch (event.type) {
+        case 'FETCH':
+          exec.layout({
+            type: 'fetchFromAPI',
+            user: event.user,
+          });
+          return {
+            ...state,
+            status: 'fetching',
+          };
+        case 'RESOLVE':
+          return {
+            status: 'fulfilled',
+            user: event.data,
+          };
+        default:
+          return state;
+      }
+    };
+
+    const Fetcher = () => {
+      const [state, dispatch] = useEffectReducer(
+        fetchEffectReducer,
+        { status: 'idle', user: undefined },
+        {
+          fetchFromAPI(_, effect) {
+            setTimeout(() => {
+              dispatch({
+                type: 'RESOLVE',
+                data: { name: effect.user },
+              });
+            }, 100);
+          },
+        }
+      );
+
+      return (
+        <div
+          onClick={() => dispatch({ type: 'FETCH', user: '42' })}
+          data-testid="result"
+        >
+          {state.user ? state.user.name : '--'}
+        </div>
+      );
+    };
+
+    const { getByTestId } = render(<Fetcher />);
+
+    const resultEl = getByTestId('result');
+
+    expect(resultEl.textContent).toEqual('--');
+
+    fireEvent.click(resultEl);
+
+    await waitFor(() => {
+      expect(resultEl.textContent).toEqual('42');
+    });
+  });
 });
