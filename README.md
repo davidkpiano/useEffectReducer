@@ -13,6 +13,7 @@ If you know how to [`useReducer`](https://reactjs.org/docs/hooks-reference.html#
 
 
 - [Installation](#installation)
+- [Isn't this unsafe?](#isnt-this-unsafe)
 - [Quick Start](#quick-start)
 - [Named Effects](#named-effects)
 - [Effect Implementations](#effect-implementations)
