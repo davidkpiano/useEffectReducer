@@ -191,12 +191,21 @@ export function useEffectReducer<
     >,
     event: TEvent | FlushEvent
   ): AggregatedEffectsState<TState, TEvent> => {
+    // Remove stopped entities if any, but otherwise keep them around
+    // if they haven't been stopped yet since this means our cleanup
+    // useEffect hasn't been executed yet
+    entitiesToStop = entitiesToStop.some(
+      entity => entity.status === EntityStatus.Stopped
+    )
+      ? entitiesToStop.filter(entity => entity.status !== EntityStatus.Stopped)
+      : entitiesToStop;
+
     const nextEffectEntities: Array<EffectEntity<TState, TEvent>> = [];
     const nextEntitiesToStop: Array<EffectEntity<TState, TEvent>> = [];
 
     if (event.type === flushEffectsSymbol) {
       // Record that effects have already been executed
-      return [state, stateEffectTuples.slice(event.count), nextEntitiesToStop];
+      return [state, stateEffectTuples.slice(event.count), entitiesToStop];
     }
 
     const exec = (
