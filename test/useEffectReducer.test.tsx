@@ -507,9 +507,13 @@ describe('useEffectReducer', () => {
     const helloButton = getByTestId('send-hello');
     const goodbyeButton = getByTestId('send-goodbye');
 
+    // Click each button twice to make sure no effect cleanup
+    // is skipped due to batching
+    fireEvent.click(helloButton);
     fireEvent.click(helloButton);
 
     setTimeout(() => {
+      fireEvent.click(goodbyeButton);
       fireEvent.click(goodbyeButton);
     }, 30);
 
