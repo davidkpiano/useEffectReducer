@@ -1,16 +1,12 @@
 # useEffectReducer
 
-A [React hook](https://reactjs.org/docs/hooks-intro.html) for managing side-effects in your reducers.
+A React hook for managing side-effects in your reducers.
 
-Inspired by the [`useReducerWithEmitEffect` hook idea](https://gist.github.com/sophiebits/145c47544430c82abd617c9cdebefee8) by [Sophie Alpert](https://twitter.com/sophiebits).
+Inspired a looooong time ago by the [`useReducerWithEmitEffect` hook idea](https://gist.github.com/sophiebits/145c47544430c82abd617c9cdebefee8) by Sophie Alpert.
 
-If you know how to [`useReducer`](https://reactjs.org/docs/hooks-reference.html#usereducer), you already know how to `useEffectReducer`.
+If you know how to `useReducer`, you already know how to `useEffectReducer`.
 
-[💻 CodeSandbox example: Dog Fetcher with `useEffectReducer`](https://codesandbox.io/s/dog-fetcher-with-useeffectreducer-g192g)
-
-<!-- START doctoc generated TOC please keep comment here to allow auto update -->
-<!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
-
+## Table of Contents
 
 - [Installation](#installation)
 - [Quick Start](#quick-start)
@@ -25,98 +21,34 @@ If you know how to [`useReducer`](https://reactjs.org/docs/hooks-reference.html#
   - [`useEffectReducer` hook](#useeffectreducer-hook)
   - [`exec(effect)`](#execeffect)
   - [`exec.stop(entity)`](#execstopentity)
-- [`exec.replace(entity, effect)`](#execreplaceentity-effect)
+  - [`exec.replace(entity, effect)`](#execreplaceentity-effect)
 - [TypeScript](#typescript)
 
-<!-- END doctoc generated TOC please keep comment here to allow auto update -->
-
 ## Installation
-
-Install it:
 
 ```bash
 npm install use-effect-reducer
 ```
 
-Import it:
-
 ```js
 import { useEffectReducer } from 'use-effect-reducer';
 ```
-
-Create an effect reducer:
-
-```js
-const someEffectReducer = (state, event, exec) => {
-  // execute effects like this:
-  exec(() => {/* ... */});
-
-  // or parameterized (better):
-  exec({ type: 'fetchUser', user: event.user });
-
-  // and treat this like a normal reducer!
-  // ...
-
-  return state;
-};
-```
-
-[Use it:](#quick-start)
-
-```js
-// ...
-const [state, dispatch] = useEffectReducer(someEffectReducer, initialState, {
-  // implementation of effects
-});
-
-// Just like useReducer:
-dispatch({ type: 'FETCH', user: 'Sophie' });
-```
-
-## Isn't this unsafe?
-
-No - internally, `useEffectReducer` (as the name implies) is abstracting this pattern:
-
-```js
-// pseudocode
-const myReducer = ([state], event) => {
-  const effects = [];
-  const exec = (effect) => effects.push(effect);
-  
-  const nextState = // calculate next state
-  
-  return [nextState, effects];
-}
-
-// in your component
-const [[state, effects], dispatch] = useReducer(myReducer);
-
-useEffect(() => {
-  effects.forEach(effect => {
-    // execute the effect
-  });
-}, [effects]);
-```
-
-Instead of being implicit about which effects are executed and _when_ they are executed, you make this explicit in the "effect reducer" with the helper `exec` function. Then, the `useEffectReducer` hook will take the pending effects and properly execute them within a `useEffect()` hook.
 
 ## Quick Start
 
-An "effect reducer" takes 3 arguments:
+An effect reducer takes 3 arguments:
 
 1. `state` - the current state
-2. `event` - the event that was dispatched to the reducer
-3. `exec` - a function that captures effects to be executed and returns an [effect entity](#effect-entities) that allows you to control the effect
+2. `event` - the event that was dispatched
+3. `exec` - a function that captures effects to be executed and returns an [effect entity](#effect-entities)
 
 ```js
 import { useEffectReducer } from 'use-effect-reducer';
 
-// I know, I know, yet another counter example
 const countReducer = (state, event, exec) => {
   switch (event.type) {
     case 'INC':
       exec(() => {
-        // "Execute" a side-effect here
         console.log('Going up!');
       });
 
@@ -142,156 +74,114 @@ const App = () => {
 };
 ```
 
+## How It Works
+
+Internally, `useEffectReducer` abstracts this pattern:
+
+```js
+const myReducer = ([state], event) => {
+  const effects = [];
+  const exec = (effect) => effects.push(effect);
+  const nextState = // calculate next state
+  return [nextState, effects];
+};
+
+const [[state, effects], dispatch] = useReducer(myReducer);
+
+useEffect(() => {
+  effects.forEach((effect) => {
+    // execute the effect
+  });
+}, [effects]);
+```
+
+Instead of being implicit about which effects are executed and when, you make this explicit in the effect reducer with `exec`. The hook then properly executes pending effects within `useEffect()`.
+
 ## Named Effects
 
-A better way to make reusable effect reducers is to have effects that are **named** and **parameterized**. This is done by running `exec(...)` an effect object (instead of a function) and specifying that named effect's implementation as the 3rd argument to `useEffectReducer(reducer, initial, effectMap)`.
+A better way to make reusable effect reducers is to use **named, parameterized effects**. Pass an effect object to `exec(...)` and specify the implementation as the 3rd argument to `useEffectReducer`:
 
 ```js
 const fetchEffectReducer = (state, event, exec) => {
   switch (event.type) {
     case 'FETCH':
-      // Capture a named effect to be executed
       exec({ type: 'fetchFromAPI', user: event.user });
-
-      return {
-        ...state,
-        status: 'fetching',
-      };
+      return { ...state, status: 'fetching' };
     case 'RESOLVE':
-      return {
-        status: 'fulfilled',
-        user: event.data,
-      };
+      return { status: 'fulfilled', user: event.data };
     default:
       return state;
   }
 };
 
-const initialState = { status: 'idle', user: undefined };
-
-const fetchFromAPIEffect = (_, effect, dispatch) => {
-  fetch(`/api/users/${effect.user}`)
-    .then(res => res.json())
-    .then(data => {
-      dispatch({
-        type: 'RESOLVE',
-        data,
-      });
-    });
-};
-
 const Fetcher = () => {
-  const [state, dispatch] = useEffectReducer(fetchEffectReducer, initialState, {
-    // Specify how effects are implemented
-    fetchFromAPI: fetchFromAPIEffect,
-  });
-
-  return (
-    <button
-      onClick={() => {
-        dispatch({ type: 'FETCH', user: 42 });
-      }}
-    >
-      Fetch user
-    </div>
+  const [state, dispatch] = useEffectReducer(
+    fetchEffectReducer,
+    { status: 'idle', user: undefined },
+    {
+      fetchFromAPI: (_, effect, dispatch) => {
+        fetch(`/api/users/${effect.user}`)
+          .then((res) => res.json())
+          .then((data) => {
+            dispatch({ type: 'RESOLVE', data });
+          });
+      },
+    }
   );
+
+  // ...
 };
 ```
 
 ## Effect Implementations
 
-An effect implementation is a function that takes 3 arguments:
+An effect implementation receives 3 arguments:
 
-1. The `state` at the time the effect was executed with `exec(effect)`
-2. The `event` object that triggered the effect
-3. The effect reducer's `dispatch` function to dispatch events back to it. This enables dispatching within effects in the `effectMap` if it is written outside of the scope of your component. If your effects require access to variables and functions in the scope of your component, write your `effectMap` there.
+1. `state` - the state at the time `exec(effect)` was called
+2. `effect` - the effect object
+3. `dispatch` - the dispatch function for sending events back to the reducer
 
-The effect implementation should return a disposal function that cleans up the effect:
+Return a cleanup function to dispose of the effect:
 
 ```js
-// Effect defined inline
 exec(() => {
   const id = setTimeout(() => {
     // do some delayed side-effect
   }, 1000);
 
-  // disposal function
   return () => {
     clearTimeout(id);
   };
 });
 ```
 
-```js
-// Parameterized effect implementation
-// (in the effect reducer)
-exec({ type: 'doDelayedEffect' });
-
-// ...
-
-// (in the component)
-const [state, dispatch] = useEffectReducer(someReducer, initialState, {
-  doDelayedEffect: () => {
-    const id = setTimeout(() => {
-      // do some delayed side-effect
-    }, 1000);
-
-    // disposal function
-    return () => {
-      clearTimeout(id);
-    };
-  },
-});
-```
-
 ## Initial Effects
 
-The 2nd argument to `useEffectReducer(state, initialState)` can either be a static `initialState` or a function that takes in an effect `exec` function and returns the `initialState`:
+The 2nd argument can be a function that receives `exec` and returns initial state:
 
 ```js
-const fetchReducer = (state, event) => {
-  if (event.type === 'RESOLVE') {
-    return {
-      ...state,
-      data: event.data,
-    };
-  }
-
-  return state;
-};
-
-const getInitialState = exec => {
-  exec({ type: 'fetchData', someQuery: '*' });
-
+const getInitialState = (exec) => {
+  exec({ type: 'fetchData', query: '*' });
   return { data: null };
 };
 
-// (in the component)
 const [state, dispatch] = useEffectReducer(fetchReducer, getInitialState, {
-  fetchData(_, { someQuery }) {
-    fetch(`/some/api?${someQuery}`)
-      .then(res => res.json())
-      .then(data => {
-        dispatch({
-          type: 'RESOLVE',
-          data,
-        });
-      });
+  fetchData(_, { query }, dispatch) {
+    fetch(`/api?${query}`)
+      .then((res) => res.json())
+      .then((data) => dispatch({ type: 'RESOLVE', data }));
   },
 });
 ```
 
 ## Effect Entities
 
-The `exec(effect)` function returns an **effect entity**, which is a special object that represents the running effect. These objects can be stored directly in the reducer's state:
+`exec(effect)` returns an **effect entity** representing the running effect. Store it in state to control the effect later:
 
 ```js
 const someReducer = (state, event, exec) => {
-  // ...
-
   return {
     ...state,
-    // state.someEffect is now an effect entity
     someEffect: exec(() => {
       /* ... */
     }),
@@ -299,26 +189,9 @@ const someReducer = (state, event, exec) => {
 };
 ```
 
-The advantage of having a reference to the effect (via the returned effect `entity`) is that you can explicitly [stop those effects](#effect-cleanup):
-
-```js
-const someReducer = (state, event, exec) => {
-  // ...
-
-  // Stop an effect entity
-  exec.stop(state.someEffect);
-
-  return {
-    ...state,
-    // state.someEffect is no longer needed
-    someEffect: undefined,
-  };
-};
-```
-
 ## Effect Cleanup
 
-Instead of implicitly relying on arbitrary values in a dependency array changing to stop an effect (as you would with `useEffect`), effects can be explicitly stopped using `exec.stop(entity)`, where `entity` is the effect entity returned from initially calling `exec(effect)`:
+Effects can be explicitly stopped using `exec.stop(entity)`:
 
 ```js
 const timerReducer = (state, event, exec) => {
@@ -327,20 +200,14 @@ const timerReducer = (state, event, exec) => {
       ...state,
       timer: exec(() => {
         const id = setTimeout(() => {
-          // Do some delayed effect
+          // delayed effect
         }, 1000);
 
-        // Disposal function - will be called when
-        // effect entity is stopped
-        return () => {
-          clearTimeout(id);
-        };
+        return () => clearTimeout(id);
       }),
     };
   } else if (event.type === 'STOP') {
-    // Stop the effect entity
     exec.stop(state.timer);
-
     return state;
   }
 
@@ -348,23 +215,13 @@ const timerReducer = (state, event, exec) => {
 };
 ```
 
-All running effect entities will automatically be stopped when the component unmounts.
+All running effects are automatically cleaned up when the component unmounts.
 
 ## Replacing Effects
 
-If you want to replace an effect with another (likely similar) effect, instead of calling `exec.stop(entity)` and calling `exec(effect)` to manually replace an effect, you can call `exec.replace(entity, effect)` as a shorthand:
+Use `exec.replace(entity, effect)` to stop an existing effect and start a new one:
 
 ```js
-const doSomeDelay = () => {
-  const id = setTimeout(() => {
-    // do some delayed effect
-  }, delay);
-
-  return () => {
-    clearTimeout(id);
-  };
-};
-
 const timerReducer = (state, event, exec) => {
   if (event.type === 'START') {
     return {
@@ -372,16 +229,12 @@ const timerReducer = (state, event, exec) => {
       timer: exec(() => doSomeDelay()),
     };
   } else if (event.type === 'LAP') {
-    // Replace the currently running effect represented by `state.timer`
-    // with a new effect
     return {
       ...state,
       timer: exec.replace(state.timer, () => doSomeDelay()),
     };
   } else if (event.type === 'STOP') {
-    // Stop the effect entity
     exec.stop(state.timer);
-
     return state;
   }
 
@@ -391,11 +244,10 @@ const timerReducer = (state, event, exec) => {
 
 ## String Events
 
-The events handled by the effect reducers are intended to be event objects with a `type` property; e.g., `{ type: 'FETCH', other: 'data' }`. For events without payload, you can dispatch the event type alone, which will be converted to an event object inside the effect reducer:
+For events without payload, you can dispatch the type string directly:
 
 ```js
-// dispatched as `{ type: 'INC' }`
-// and is the same as `dispatch({ type: 'INC' })`
+// Same as dispatch({ type: 'INC' })
 dispatch('INC');
 ```
 
@@ -403,97 +255,42 @@ dispatch('INC');
 
 ### `useEffectReducer` hook
 
-The `useEffectReducer` hook takes the same first 2 arguments as the built-in `useReducer` hook, and returns the current `state` returned from the effect reducer, as well as a `dispatch` function for sending events to the reducer.
-
 ```js
-const SomeComponent = () => {
-  const [state, dispatch] = useEffectReducer(someEffectReducer, initialState);
-
-  // ...
-};
-```
-
-The 2nd argument to `useEffectReducer(...)` can either be a static `initialState` or a function that takes in `exec` and returns an `initialState` (with executed initial effects). See [Initial Effects](#initial-effects) for more information.
-
-```js
-const SomeComponent = () => {
-  const [state, dispatch] = useEffectReducer(
-    someEffectReducer,
-    exec => {
-      exec({ type: 'someEffect' });
-      return someInitialState;
-    },
-    {
-      someEffect(state, effect) {
-        // ...
-      },
-    }
-  );
-
-  // ...
-};
-```
-
-Additionally, the `useEffectReducer` hook takes a 3rd argument, which is the implementation details for [named effects](#named-effects):
-
-```js
-const SomeComponent = () => {
-  const [state, dispatch] = useEffectReducer(someEffectReducer, initialState, {
-    log: (state, effect, dispatch) => {
-      console.log(state);
-    },
-  });
-
-  // ...
-};
+const [state, dispatch] = useEffectReducer(effectReducer, initialState);
+const [state, dispatch] = useEffectReducer(effectReducer, initialState, effectsMap);
+const [state, dispatch] = useEffectReducer(effectReducer, initFunction, effectsMap);
 ```
 
 ### `exec(effect)`
 
-Used in an effect reducer, `exec(effect)` queues the `effect` for execution and returns an [effect entity](#effect-entities).
-
-The `effect` can either be an effect object:
+Queues an effect for execution. Returns an [effect entity](#effect-entities).
 
 ```js
-// ...
-const entity = exec({
-  type: 'alert',
-  message: 'hello',
-});
-```
+const entity = exec({ type: 'alert', message: 'hello' });
 
-Or it can be an inline effect implementation:
-
-```js
-// ...
-const entity = exec(() => {
-  alert('hello');
-});
+// or inline:
+const entity = exec(() => alert('hello'));
 ```
 
 ### `exec.stop(entity)`
 
-Used in an effect reducer, `exec.stop(entity)` stops the effect represented by the `entity`. Returns `void`.
+Stops the effect represented by the entity and runs its cleanup function.
 
 ```js
-// Queues the effect entity for disposal
 exec.stop(someEntity);
 ```
 
-## `exec.replace(entity, effect)`
+### `exec.replace(entity, effect)`
 
-Used in an effect reducer, `exec.replace(entity, effect)` does two things:
+Stops the existing entity and queues a new effect. Returns a new effect entity.
 
-1. Queues the `entity` for disposal (same as calling `exec.stop(entity)`)
-2. Returns a new [effect entity](#effect-entities) that represents the `effect` that replaces the previous `entity`.
+```js
+const newEntity = exec.replace(oldEntity, newEffect);
+```
 
 ## TypeScript
 
-The effect reducer can be specified as an `EffectReducer<TState, TEvent, TEffect>`, where the generic types are:
-
-- The `state` type returned from the reducer
-- The `event` object type that can be dispatched to the reducer
-- The `effect` object type that can be executed
+The effect reducer can be typed with `EffectReducer<TState, TEvent, TEffect>`:
 
 ```ts
 import { useEffectReducer, EffectReducer } from 'use-effect-reducer';
@@ -503,48 +300,30 @@ interface User {
 }
 
 type FetchState =
-  | {
-      status: 'idle';
-      user: undefined;
-    }
-  | {
-      status: 'fetching';
-      user: User | undefined;
-    }
-  | {
-      status: 'fulfilled';
-      user: User;
-    };
+  | { status: 'idle'; user: undefined }
+  | { status: 'fetching'; user: User | undefined }
+  | { status: 'fulfilled'; user: User };
 
 type FetchEvent =
-  | {
-      type: 'FETCH';
-      user: string;
-    }
-  | {
-      type: 'RESOLVE';
-      data: User;
-    };
+  | { type: 'FETCH'; user: string }
+  | { type: 'RESOLVE'; data: User };
 
 type FetchEffect = {
   type: 'fetchFromAPI';
   user: string;
 };
 
-const fetchEffectReducer: EffectReducer<FetchState, FetchEvent, FetchEffect> = (
-  state,
-  event,
-  exec
-) => {
+const fetchEffectReducer: EffectReducer<
+  FetchState,
+  FetchEvent,
+  FetchEffect
+> = (state, event, exec) => {
   switch (event.type) {
     case 'FETCH':
-    // State, event, and effect types will be inferred!
-
-    // Also you should probably switch on
-    // `state.status` first ;-)
-
-    // ...
-
+      exec({ type: 'fetchFromAPI', user: event.user });
+      return { ...state, status: 'fetching' };
+    case 'RESOLVE':
+      return { status: 'fulfilled', user: event.data };
     default:
       return state;
   }

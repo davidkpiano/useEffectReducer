@@ -1,42 +1,30 @@
 name: CI
-on: [push]
+on: [push, pull_request]
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Begin CI...
-        uses: actions/checkout@v2
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Use Node 12
-        uses: actions/setup-node@v1
-        with:
-          node-version: 12.x
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
 
-      - name: Use cached node_modules
-        uses: actions/cache@v1
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
-          path: node_modules
-          key: nodeModules-${{ hashFiles('**/yarn.lock') }}
-          restore-keys: |
-            nodeModules-
+          node-version: latest
+          cache: 'pnpm'
 
       - name: Install dependencies
-        run: yarn install --frozen-lockfile
-        env:
-          CI: true
+        run: pnpm install --frozen-lockfile
 
       - name: Lint
-        run: yarn lint
-        env:
-          CI: true
+        run: pnpm lint
 
       - name: Test
-        run: yarn test --ci --coverage --maxWorkers=2
-        env:
-          CI: true
+        run: pnpm test
 
       - name: Build
-        run: yarn build
-        env:
-          CI: true
+        run: pnpm build

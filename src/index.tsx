@@ -1,4 +1,10 @@
-import { useReducer, useEffect, useCallback, useRef, useMemo } from 'react';
+import {
+  useReducer,
+  useEffect,
+  useCallback,
+  useRef,
+  type Dispatch,
+} from 'react';
 
 type CleanupFunction = () => void;
 
@@ -9,7 +15,7 @@ export type EffectFunction<
 > = (
   state: TState,
   effect: TEffect,
-  dispatch: React.Dispatch<TEvent>
+  dispatch: Dispatch<TEvent>
 ) => CleanupFunction | void;
 
 export interface EffectObject<TState, TEvent extends EventObject> {
@@ -49,7 +55,7 @@ enum EntityStatus {
 export interface EffectEntity<TState, TEvent extends EventObject> {
   type: string;
   status: EntityStatus;
-  start: (state: TState, dispatch: React.Dispatch<TEvent>) => void;
+  start: (state: TState, dispatch: Dispatch<TEvent>) => void;
   stop: () => void;
 }
 
@@ -108,7 +114,6 @@ export type EffectReducer<
 
 const flushEffectsSymbol = Symbol();
 
-// 🚽
 interface FlushEvent {
   type: typeof flushEffectsSymbol;
   count: number;
@@ -182,7 +187,7 @@ export function useEffectReducer<
   effectReducer: EffectReducer<TState, TEvent, TEffect>,
   initialState: TState | InitialEffectStateGetter<TState, TEvent, TEffect>,
   effectsMap?: EffectsMap<TState, TEvent, TEffect>
-): [TState, React.Dispatch<TEvent | TEvent['type']>] {
+): [TState, Dispatch<TEvent | TEvent['type']>] {
   const entitiesRef = useRef<Set<EffectEntity<TState, TEvent>>>(new Set());
   const wrappedReducer = (
     [state, stateEffectTuples, entitiesToStop]: AggregatedEffectsState<
@@ -242,10 +247,14 @@ export function useEffectReducer<
     ];
   };
 
-  const initialStateAndEffects: AggregatedEffectsState<
+  // Lazy initialization using useRef to avoid useMemo semantic issues
+  // (React Compiler may drop memoization; Strict Mode double-invokes useMemo)
+  const initialStateRef = useRef<AggregatedEffectsState<
     TState,
     TEvent
-  > = useMemo(() => {
+  > | null>(null);
+
+  if (initialStateRef.current === null) {
     if (typeof initialState === 'function') {
       const initialEffectEntities: Array<EffectEntity<TState, TEvent>> = [];
 
@@ -263,20 +272,20 @@ export function useEffectReducer<
         return effectEntity;
       });
 
-      return [
+      initialStateRef.current = [
         resolvedInitialState,
         [[resolvedInitialState, initialEffectEntities]],
         [],
       ];
+    } else {
+      initialStateRef.current = [initialState, [], []];
     }
-
-    return [initialState, [], []];
-  }, []);
+  }
 
   const [
     [state, effectStateEntityTuples, entitiesToStop],
     dispatch,
-  ] = useReducer(wrappedReducer, initialStateAndEffects);
+  ] = useReducer(wrappedReducer, initialStateRef.current);
 
   const wrappedDispatch = useCallback((event: TEvent | TEvent['type']) => {
     dispatch(toEventObject(event));
@@ -286,7 +295,9 @@ export function useEffectReducer<
   useEffect(() => {
     if (entitiesToStop.length) {
       entitiesToStop.forEach(entity => {
-        entity.stop();
+        if (entity.status === EntityStatus.Started) {
+          entity.stop();
+        }
         entitiesRef.current.delete(entity);
       });
     }
@@ -313,8 +324,8 @@ export function useEffectReducer<
     }
   }, [effectStateEntityTuples]);
 
-  // When the component unmounts, stop all effects that are
-  // currently started
+  // When the component unmounts, stop all running effects
+  // and clean up idle entities (e.g., from Suspense delays)
   useEffect(() => {
     return () => {
       entitiesRef.current.forEach(entity => {
@@ -322,6 +333,7 @@ export function useEffectReducer<
           entity.stop();
         }
       });
+      entitiesRef.current.clear();
     };
   }, []);
 
