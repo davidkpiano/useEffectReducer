@@ -1,12 +1,10 @@
-import {
-  useReducer,
-  useEffect,
-  useCallback,
-  useRef,
-  type Dispatch,
-} from 'react';
+import { useReducer, useEffect, useCallback, useRef } from 'react';
 
 type CleanupFunction = () => void;
+
+export type Dispatch<TEvent extends EventObject> = (
+  event: TEvent | TEvent['type']
+) => void;
 
 export type EffectFunction<
   TState,
@@ -32,7 +30,7 @@ export type Effect<
 
 type EntityTuple<TState, TEvent extends EventObject> = [
   TState,
-  EffectEntity<TState, TEvent>[]
+  InternalEffectEntity<TState, TEvent>[]
 ];
 
 type AggregatedEffectsState<TState, TEvent extends EventObject> = [
@@ -46,11 +44,7 @@ export interface EventObject {
   [key: string]: any;
 }
 
-enum EntityStatus {
-  Idle,
-  Started,
-  Stopped,
-}
+export type EntityStatus = 'idle' | 'started' | 'stopped';
 
 export interface EffectEntity<TState, TEvent extends EventObject> {
   type: string;
@@ -59,27 +53,43 @@ export interface EffectEntity<TState, TEvent extends EventObject> {
   stop: () => void;
 }
 
+interface InternalEffectEntity<TState, TEvent extends EventObject>
+  extends EffectEntity<TState, TEvent> {
+  /** Restarts an entity that was stopped by an unmount (StrictMode, Activity) */
+  resume: () => void;
+}
+
 function createEffectEntity<
   TState,
   TEvent extends EventObject,
   TEffect extends EffectObject<TState, TEvent>
->(effect: TEffect): EffectEntity<TState, TEvent> {
+>(effect: TEffect): InternalEffectEntity<TState, TEvent> {
   let effectCleanup: CleanupFunction | void;
+  let startArgs: [TState, Dispatch<TEvent>] | undefined;
 
-  const entity: EffectEntity<TState, TEvent> = {
+  const run = () => {
+    const [state, dispatch] = startArgs!;
+    effectCleanup = effect.exec?.(state, effect, dispatch);
+    entity.status = 'started';
+  };
+
+  const entity: InternalEffectEntity<TState, TEvent> = {
     type: effect.type,
-    status: EntityStatus.Idle,
+    status: 'idle',
     start: (state, dispatch) => {
-      if (effect.exec) {
-        effectCleanup = effect.exec(state, effect, dispatch);
-      }
-      entity.status = EntityStatus.Started;
+      if (entity.status !== 'idle') return;
+      startArgs = [state, dispatch];
+      run();
     },
     stop: () => {
-      if (effectCleanup && typeof effectCleanup === 'function') {
+      if (entity.status === 'started' && typeof effectCleanup === 'function') {
         effectCleanup();
       }
-      entity.status = EntityStatus.Stopped;
+      effectCleanup = undefined;
+      entity.status = 'stopped';
+    },
+    resume: () => {
+      if (entity.status === 'stopped' && startArgs) run();
     },
   };
 
@@ -114,9 +124,9 @@ export type EffectReducer<
 
 const flushEffectsSymbol = Symbol();
 
-interface FlushEvent {
+interface FlushEvent<TState, TEvent extends EventObject> {
   type: typeof flushEffectsSymbol;
-  count: number;
+  tuples: EntityTuple<TState, TEvent>[];
 }
 
 export function toEffect<TState, TEvent extends EventObject>(
@@ -187,30 +197,42 @@ export function useEffectReducer<
   effectReducer: EffectReducer<TState, TEvent, TEffect>,
   initialState: TState | InitialEffectStateGetter<TState, TEvent, TEffect>,
   effectsMap?: EffectsMap<TState, TEvent, TEffect>
-): [TState, Dispatch<TEvent | TEvent['type']>] {
-  const entitiesRef = useRef<Set<EffectEntity<TState, TEvent>>>(new Set());
+): [TState, Dispatch<TEvent>] {
+  // Entities that have been started and not yet explicitly stopped
+  const runningRef = useRef(new Set<InternalEffectEntity<TState, TEvent>>());
+
+  const createEntity = (
+    effect: TEffect | EffectFunction<TState, TEvent, TEffect>
+  ) =>
+    createEffectEntity<TState, TEvent, TEffect>(
+      toEffectObject(effect, effectsMap)
+    );
+
   const wrappedReducer = (
     [state, stateEffectTuples, entitiesToStop]: AggregatedEffectsState<
       TState,
       TEvent
     >,
-    event: TEvent | FlushEvent
+    event: TEvent | FlushEvent<TState, TEvent>
   ): AggregatedEffectsState<TState, TEvent> => {
-    const nextEffectEntities: Array<EffectEntity<TState, TEvent>> = [];
+    const nextEffectEntities: Array<InternalEffectEntity<TState, TEvent>> = [];
     const nextEntitiesToStop: Array<EffectEntity<TState, TEvent>> = [];
 
     if (event.type === flushEffectsSymbol) {
-      // Record that effects have already been executed
-      return [state, stateEffectTuples.slice(event.count), nextEntitiesToStop];
+      // Remove executed tuples by identity so that flushing is idempotent
+      // (StrictMode re-runs effects, which would flush twice)
+      const flushed = event.tuples;
+      return [
+        state,
+        stateEffectTuples.filter(tuple => !flushed.includes(tuple)),
+        nextEntitiesToStop,
+      ];
     }
 
     const exec = (
       effect: TEffect | EffectFunction<TState, TEvent, TEffect>
     ) => {
-      const effectObject = toEffectObject(effect, effectsMap);
-      const effectEntity = createEffectEntity<TState, TEvent, TEffect>(
-        effectObject
-      );
+      const effectEntity = createEntity(effect);
       nextEffectEntities.push(effectEntity);
 
       return effectEntity;
@@ -221,7 +243,7 @@ export function useEffectReducer<
     };
 
     exec.replace = (
-      entity: EffectEntity<TState, TEvent>,
+      entity: EffectEntity<TState, TEvent> | undefined,
       effect: TEffect | EffectFunction<TState, TEvent, TEffect>
     ) => {
       if (entity) {
@@ -247,60 +269,50 @@ export function useEffectReducer<
     ];
   };
 
-  // Lazy initialization using useRef to avoid useMemo semantic issues
-  // (React Compiler may drop memoization; Strict Mode double-invokes useMemo)
-  const initialStateRef = useRef<AggregatedEffectsState<
-    TState,
-    TEvent
-  > | null>(null);
+  const [
+    [state, effectStateEntityTuples, entitiesToStop],
+    dispatch,
+  ] = useReducer(
+    wrappedReducer,
+    initialState,
+    (initialState): AggregatedEffectsState<TState, TEvent> => {
+      if (typeof initialState !== 'function') {
+        return [initialState, [], []];
+      }
 
-  if (initialStateRef.current === null) {
-    if (typeof initialState === 'function') {
-      const initialEffectEntities: Array<EffectEntity<TState, TEvent>> = [];
-
+      const initialEffectEntities: Array<InternalEffectEntity<
+        TState,
+        TEvent
+      >> = [];
       const resolvedInitialState = (initialState as InitialEffectStateGetter<
         TState,
         TEvent,
         TEffect
       >)(effect => {
-        const effectObject = toEffectObject(effect, effectsMap);
-        const effectEntity = createEffectEntity<TState, TEvent, TEffect>(
-          effectObject
-        );
-
+        const effectEntity = createEntity(effect);
         initialEffectEntities.push(effectEntity);
         return effectEntity;
       });
 
-      initialStateRef.current = [
+      return [
         resolvedInitialState,
         [[resolvedInitialState, initialEffectEntities]],
         [],
       ];
-    } else {
-      initialStateRef.current = [initialState, [], []];
     }
-  }
+  );
 
-  const [
-    [state, effectStateEntityTuples, entitiesToStop],
-    dispatch,
-  ] = useReducer(wrappedReducer, initialStateRef.current);
-
-  const wrappedDispatch = useCallback((event: TEvent | TEvent['type']) => {
-    dispatch(toEventObject(event));
-  }, []);
+  const wrappedDispatch: Dispatch<TEvent> = useCallback(
+    event => dispatch(toEventObject(event)),
+    []
+  );
 
   // First, stop all effects marked for disposal
   useEffect(() => {
-    if (entitiesToStop.length) {
-      entitiesToStop.forEach(entity => {
-        if (entity.status === EntityStatus.Started) {
-          entity.stop();
-        }
-        entitiesRef.current.delete(entity);
-      });
-    }
+    entitiesToStop.forEach(entity => {
+      entity.stop();
+      runningRef.current.delete(entity as InternalEffectEntity<TState, TEvent>);
+    });
   }, [entitiesToStop]);
 
   // Then, execute all effects queued for execution
@@ -308,32 +320,27 @@ export function useEffectReducer<
     if (effectStateEntityTuples.length) {
       effectStateEntityTuples.forEach(([effectState, effectEntities]) => {
         effectEntities.forEach(entity => {
-          if (entity.status !== EntityStatus.Idle) return;
+          if (entity.status !== 'idle') return;
 
-          entitiesRef.current.add(entity);
-          entity.start(effectState, dispatch);
+          runningRef.current.add(entity);
+          entity.start(effectState, wrappedDispatch);
         });
       });
 
       // Optimization: flush effects that have been executed
-      // so that they no longer needed to be iterated through
-      dispatch({
-        type: flushEffectsSymbol,
-        count: effectStateEntityTuples.length,
-      });
+      // so that they no longer need to be iterated through
+      dispatch({ type: flushEffectsSymbol, tuples: effectStateEntityTuples });
     }
   }, [effectStateEntityTuples]);
 
-  // When the component unmounts, stop all running effects
-  // and clean up idle entities (e.g., from Suspense delays)
+  // Stop all running effects on unmount. If the same instance remounts
+  // (StrictMode, <Activity>), resume the effects that the unmount stopped.
   useEffect(() => {
+    const running = runningRef.current;
+    running.forEach(entity => entity.resume());
+
     return () => {
-      entitiesRef.current.forEach(entity => {
-        if (entity.status === EntityStatus.Started) {
-          entity.stop();
-        }
-      });
-      entitiesRef.current.clear();
+      running.forEach(entity => entity.stop());
     };
   }, []);
 

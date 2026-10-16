@@ -925,4 +925,120 @@ describe('useEffectReducer', () => {
     // Each effect should receive the state snapshot at the time it was queued
     expect(effectStates).toEqual([1, 2, 3]);
   });
+
+  it('keeps long-running initial effects alive under StrictMode', () => {
+    let active = 0;
+
+    const reducer: EffectReducer<null, { type: 'NOOP' }> = state => state;
+
+    const App = () => {
+      useEffectReducer(reducer, exec => {
+        exec(() => {
+          active++;
+          return () => {
+            active--;
+          };
+        });
+        return null;
+      });
+      return null;
+    };
+
+    const { unmount } = render(
+      <StrictMode>
+        <App />
+      </StrictMode>
+    );
+
+    // StrictMode simulates unmount/remount; the effect must be running after
+    expect(active).toBe(1);
+
+    unmount();
+    expect(active).toBe(0);
+  });
+
+  it('keeps long-running dispatched effects alive under StrictMode', () => {
+    let active = 0;
+
+    const reducer: EffectReducer<number, { type: 'START' }> = (
+      state,
+      _,
+      exec
+    ) => {
+      exec(() => {
+        active++;
+        return () => {
+          active--;
+        };
+      });
+      return state + 1;
+    };
+
+    const App = () => {
+      const [, dispatch] = useEffectReducer(reducer, 0);
+      return <button data-testid="start" onClick={() => dispatch('START')} />;
+    };
+
+    const { getByTestId, unmount } = render(
+      <StrictMode>
+        <App />
+      </StrictMode>
+    );
+
+    fireEvent.click(getByTestId('start'));
+    expect(active).toBe(1);
+
+    unmount();
+    expect(active).toBe(0);
+  });
+
+  it('does not start an effect stopped before it was started', () => {
+    const started = vi.fn();
+
+    type State = { entity?: EffectEntity<State, { type: 'GO' }> };
+
+    const reducer: EffectReducer<State, { type: 'GO' }> = (_, __, exec) => {
+      const entity = exec(started);
+      exec.stop(entity);
+      return { entity };
+    };
+
+    const App = () => {
+      const [, dispatch] = useEffectReducer(reducer, {});
+      return <button data-testid="go" onClick={() => dispatch('GO')} />;
+    };
+
+    const { getByTestId } = render(<App />);
+    fireEvent.click(getByTestId('go'));
+
+    expect(started).not.toHaveBeenCalled();
+  });
+
+  it('accepts string events from dispatch inside effects', () => {
+    const reducer: EffectReducer<number, { type: 'START' } | { type: 'DONE' }> = (
+      state,
+      event,
+      exec
+    ) => {
+      if (event.type === 'START') {
+        exec((_, __, dispatch) => dispatch('DONE'));
+        return state;
+      }
+      return event.type === 'DONE' ? state + 1 : state;
+    };
+
+    const App = () => {
+      const [count, dispatch] = useEffectReducer(reducer, 0);
+      return (
+        <button data-testid="start" onClick={() => dispatch('START')}>
+          {count}
+        </button>
+      );
+    };
+
+    const { getByTestId } = render(<App />);
+    fireEvent.click(getByTestId('start'));
+
+    expect(getByTestId('start').textContent).toBe('1');
+  });
 });

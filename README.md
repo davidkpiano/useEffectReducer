@@ -251,6 +251,8 @@ For events without payload, you can dispatch the type string directly:
 dispatch('INC');
 ```
 
+This also works for the `dispatch` passed to effect implementations.
+
 ## API
 
 ### `useEffectReducer` hook
