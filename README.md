@@ -144,6 +144,8 @@ An effect implementation receives 4 arguments:
 
 Implementations in the effects map are looked up when the effect starts, so they see the latest props.
 
+If the component is hidden by `<Activity>` (or remounted by StrictMode), running effects are stopped and later resumed with the latest state.
+
 Return a cleanup function to dispose of the effect:
 
 ```js

@@ -1150,6 +1150,44 @@ describe('useEffectReducer', () => {
     expect(log).toEqual(['start a', 'stop a', 'start b']);
   });
 
+  it('resumes effects with the latest state after <Activity> is shown', () => {
+    const log: number[] = [];
+
+    const reducer: EffectReducer<number, { type: 'INC' }> = state => state + 1;
+
+    let dispatch!: (event: 'INC') => void;
+    const App = () => {
+      const [, d] = useEffectReducer(reducer, exec => {
+        exec(state => {
+          log.push(state);
+        });
+        return 0;
+      });
+      dispatch = d;
+      return null;
+    };
+
+    const { rerender } = render(
+      <Activity mode="visible">
+        <App />
+      </Activity>
+    );
+    rerender(
+      <Activity mode="hidden">
+        <App />
+      </Activity>
+    );
+    act(() => dispatch('INC'));
+    act(() => dispatch('INC'));
+    rerender(
+      <Activity mode="visible">
+        <App />
+      </Activity>
+    );
+
+    expect(log).toEqual([0, 2]);
+  });
+
   it('ignores exec.stop(undefined)', () => {
     const reducer: EffectReducer<number, { type: 'STOP' }> = (
       state,

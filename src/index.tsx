@@ -75,7 +75,7 @@ export interface EffectEntity<TState, TEvent extends EventObject> {
 interface InternalEffectEntity<TState, TEvent extends EventObject>
   extends EffectEntity<TState, TEvent> {
   /** Restarts an entity that was stopped by an unmount (StrictMode, Activity) */
-  resume: () => void;
+  resume: (state: TState) => void;
 }
 
 function createEffectEntity<
@@ -115,8 +115,11 @@ function createEffectEntity<
       effectCleanup = undefined;
       entity.status = 'stopped';
     },
-    resume: () => {
-      if (entity.status === 'stopped' && startArgs) run();
+    resume: state => {
+      if (entity.status === 'stopped' && startArgs) {
+        startArgs[0] = state;
+        run();
+      }
     },
   };
 
@@ -370,11 +373,17 @@ export function useEffectReducer<
     }
   }, [effectStateEntityTuples]);
 
+  // Resumed effects receive the latest committed state
+  const stateRef = useRef(state);
+  useInsertionEffect(() => {
+    stateRef.current = state;
+  });
+
   // Stop all running effects on unmount. If the same instance remounts
   // (StrictMode, <Activity>), resume the effects that the unmount stopped.
   useEffect(() => {
     const running = runningRef.current;
-    running.forEach(entity => entity.resume());
+    running.forEach(entity => entity.resume(stateRef.current));
 
     return () => {
       running.forEach(entity => entity.stop());

@@ -2,7 +2,7 @@
 'use-effect-reducer': minor
 ---
 
-- Fix: running effects (including initial effects) are resumed after StrictMode's simulated unmount/remount and when an `<Activity>` boundary becomes visible again. Previously they were stopped and never restarted.
+- Fix: running effects (including initial effects) are resumed after StrictMode's simulated unmount/remount and when an `<Activity>` boundary becomes visible again. Previously they were stopped and never restarted Resumed effects receive the latest state.
 - Fix: an effect stopped via `exec.stop(entity)` in the same reducer call that queued it no longer starts.
 - Fix: effects queued by a synchronous dispatch from inside an effect are no longer dropped under StrictMode.
 - `dispatch` passed to effect implementations now accepts string events, like the hook's `dispatch`.
