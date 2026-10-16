@@ -1,10 +1,28 @@
-import { useReducer, useEffect, useCallback, useRef } from 'react';
+import {
+  useReducer,
+  useEffect,
+  useCallback,
+  useRef,
+  useInsertionEffect,
+} from 'react';
 
 type CleanupFunction = () => void;
 
+/** Event types that can be dispatched as a string (no required payload) */
+type PayloadlessEventType<TEvent extends EventObject> = TEvent extends any
+  ? { type: TEvent['type'] } extends TEvent
+    ? TEvent['type']
+    : never
+  : never;
+
 export type Dispatch<TEvent extends EventObject> = (
-  event: TEvent | TEvent['type']
+  event: TEvent | PayloadlessEventType<TEvent>
 ) => void;
+
+export interface EffectContext {
+  /** Aborted when the effect is stopped */
+  signal: AbortSignal;
+}
 
 export type EffectFunction<
   TState,
@@ -13,8 +31,9 @@ export type EffectFunction<
 > = (
   state: TState,
   effect: TEffect,
-  dispatch: Dispatch<TEvent>
-) => CleanupFunction | void;
+  dispatch: Dispatch<TEvent>,
+  context: EffectContext
+) => CleanupFunction | void | Promise<void>;
 
 export interface EffectObject<TState, TEvent extends EventObject> {
   [key: string]: any;
@@ -63,13 +82,20 @@ function createEffectEntity<
   TState,
   TEvent extends EventObject,
   TEffect extends EffectObject<TState, TEvent>
->(effect: TEffect): InternalEffectEntity<TState, TEvent> {
-  let effectCleanup: CleanupFunction | void;
+>(
+  effect: TEffect,
+  resolveExec: () => EffectFunction<TState, TEvent, TEffect> | undefined
+): InternalEffectEntity<TState, TEvent> {
+  let effectCleanup: ReturnType<EffectFunction<TState, TEvent, TEffect>>;
+  let controller: AbortController | undefined;
   let startArgs: [TState, Dispatch<TEvent>] | undefined;
 
   const run = () => {
     const [state, dispatch] = startArgs!;
-    effectCleanup = effect.exec?.(state, effect, dispatch);
+    controller = new AbortController();
+    effectCleanup = resolveExec()?.(state, effect, dispatch, {
+      signal: controller.signal,
+    });
     entity.status = 'started';
   };
 
@@ -82,8 +108,9 @@ function createEffectEntity<
       run();
     },
     stop: () => {
-      if (entity.status === 'started' && typeof effectCleanup === 'function') {
-        effectCleanup();
+      if (entity.status === 'started') {
+        controller?.abort();
+        if (typeof effectCleanup === 'function') effectCleanup();
       }
       effectCleanup = undefined;
       entity.status = 'stopped';
@@ -105,7 +132,7 @@ export interface EffectReducerExec<
     TState,
     TEvent
   >;
-  stop: (entity: EffectEntity<TState, TEvent>) => void;
+  stop: (entity: EffectEntity<TState, TEvent> | undefined) => void;
   replace: (
     entity: EffectEntity<TState, TEvent> | undefined,
     effect: TEffect | EffectFunction<TState, TEvent, TEffect>
@@ -146,7 +173,7 @@ export type EffectsMap<
   [key in TEffect['type']]: EffectFunction<
     TState,
     TEvent,
-    TEffect & { type: key }
+    Extract<TEffect, { type: key }>
   >;
 };
 
@@ -165,15 +192,10 @@ const toEffectObject = <
   TEvent extends EventObject,
   TEffect extends EffectObject<TState, TEvent>
 >(
-  effect: TEffect | EffectFunction<TState, TEvent, TEffect>,
-  effectsMap?: EffectsMap<TState, TEvent, TEffect>
+  effect: TEffect | EffectFunction<TState, TEvent, TEffect>
 ): TEffect => {
   const type = typeof effect === 'function' ? effect.name : effect.type;
-  const customExec = effectsMap
-    ? effectsMap[type as TEffect['type']]
-    : undefined;
-  const exec =
-    customExec || (typeof effect === 'function' ? effect : effect.exec);
+  const exec = typeof effect === 'function' ? effect : effect.exec;
   const other = typeof effect === 'function' ? {} : effect;
 
   return { ...other, type, exec } as TEffect;
@@ -182,10 +204,10 @@ const toEffectObject = <
 export type InitialEffectStateGetter<
   TState,
   TEvent extends EventObject,
-  TEffect extends EffectObject<TState, any>
+  TEffect extends EffectObject<TState, TEvent>
 > = (
   exec: (
-    effect: TEffect | EffectFunction<TState, any, TEffect>
+    effect: TEffect | EffectFunction<TState, TEvent, TEffect>
   ) => EffectEntity<TState, TEvent>
 ) => TState;
 
@@ -201,12 +223,25 @@ export function useEffectReducer<
   // Entities that have been started and not yet explicitly stopped
   const runningRef = useRef(new Set<InternalEffectEntity<TState, TEvent>>());
 
+  // Effect implementations are looked up when an effect starts, so they
+  // always see the latest props (like useEffectEvent)
+  const effectsMapRef = useRef(effectsMap);
+  useInsertionEffect(() => {
+    effectsMapRef.current = effectsMap;
+  });
+
   const createEntity = (
     effect: TEffect | EffectFunction<TState, TEvent, TEffect>
-  ) =>
-    createEffectEntity<TState, TEvent, TEffect>(
-      toEffectObject(effect, effectsMap)
+  ) => {
+    const effectObject = toEffectObject(effect);
+    return createEffectEntity<TState, TEvent, TEffect>(
+      effectObject,
+      () =>
+        (effectsMapRef.current?.[effectObject.type as TEffect['type']] as
+          | EffectFunction<TState, TEvent, TEffect>
+          | undefined) ?? effectObject.exec
     );
+  };
 
   const wrappedReducer = (
     [state, stateEffectTuples, entitiesToStop]: AggregatedEffectsState<
@@ -238,8 +273,10 @@ export function useEffectReducer<
       return effectEntity;
     };
 
-    exec.stop = (entity: EffectEntity<TState, TEvent>) => {
-      nextEntitiesToStop.push(entity);
+    exec.stop = (entity: EffectEntity<TState, TEvent> | undefined) => {
+      if (entity) {
+        nextEntitiesToStop.push(entity);
+      }
     };
 
     exec.replace = (
@@ -303,7 +340,7 @@ export function useEffectReducer<
   );
 
   const wrappedDispatch: Dispatch<TEvent> = useCallback(
-    event => dispatch(toEventObject(event)),
+    event => dispatch(toEventObject<TEvent>(event)),
     []
   );
 

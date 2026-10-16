@@ -135,11 +135,14 @@ const Fetcher = () => {
 
 ## Effect Implementations
 
-An effect implementation receives 3 arguments:
+An effect implementation receives 4 arguments:
 
 1. `state` - the state at the time `exec(effect)` was called
 2. `effect` - the effect object
 3. `dispatch` - the dispatch function for sending events back to the reducer
+4. `context` - `{ signal }`, an `AbortSignal` that is aborted when the effect is stopped
+
+Implementations in the effects map are looked up when the effect starts, so they see the latest props.
 
 Return a cleanup function to dispose of the effect:
 
@@ -152,6 +155,15 @@ exec(() => {
   return () => {
     clearTimeout(id);
   };
+});
+```
+
+Or use `signal`, which also works with async effects:
+
+```js
+exec(async (state, effect, dispatch, { signal }) => {
+  const res = await fetch('/api/data', { signal });
+  dispatch({ type: 'RESOLVE', data: await res.json() });
 });
 ```
 
@@ -251,7 +263,7 @@ For events without payload, you can dispatch the type string directly:
 dispatch('INC');
 ```
 
-This also works for the `dispatch` passed to effect implementations.
+This also works for the `dispatch` passed to effect implementations. In TypeScript, only events with no required payload can be dispatched as strings.
 
 ## API
 
@@ -276,7 +288,7 @@ const entity = exec(() => alert('hello'));
 
 ### `exec.stop(entity)`
 
-Stops the effect represented by the entity and runs its cleanup function.
+Stops the effect represented by the entity, aborts its `signal`, and runs its cleanup function. Does nothing if `entity` is `undefined`.
 
 ```js
 exec.stop(someEntity);

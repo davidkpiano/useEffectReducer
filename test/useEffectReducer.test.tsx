@@ -1,4 +1,10 @@
-import { useState, useEffect, useLayoutEffect, StrictMode } from 'react';
+import {
+  useState,
+  useEffect,
+  useLayoutEffect,
+  StrictMode,
+  Activity,
+} from 'react';
 import { render, fireEvent, waitFor, act } from '@testing-library/react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 
@@ -1040,5 +1046,131 @@ describe('useEffectReducer', () => {
     fireEvent.click(getByTestId('start'));
 
     expect(getByTestId('start').textContent).toBe('1');
+  });
+
+  it('aborts the effect signal when the effect is stopped', () => {
+    let signal: AbortSignal | undefined;
+
+    type State = { entity?: EffectEntity<State, Ev> };
+    type Ev = { type: 'START' } | { type: 'STOP' };
+
+    const reducer: EffectReducer<State, Ev> = (state, event, exec) => {
+      if (event.type === 'START') {
+        return {
+          entity: exec((_, __, ___, ctx) => {
+            signal = ctx.signal;
+          }),
+        };
+      }
+      exec.stop(state.entity);
+      return {};
+    };
+
+    const App = () => {
+      const [, dispatch] = useEffectReducer(reducer, {});
+      return (
+        <>
+          <button data-testid="start" onClick={() => dispatch('START')} />
+          <button data-testid="stop" onClick={() => dispatch('STOP')} />
+        </>
+      );
+    };
+
+    const { getByTestId } = render(<App />);
+    fireEvent.click(getByTestId('start'));
+    expect(signal?.aborted).toBe(false);
+
+    fireEvent.click(getByTestId('stop'));
+    expect(signal?.aborted).toBe(true);
+  });
+
+  it('aborts the effect signal on unmount', () => {
+    let signal: AbortSignal | undefined;
+
+    const App = () => {
+      useEffectReducer(
+        s => s,
+        exec => {
+          exec(async (_, __, ___, ctx) => {
+            signal = ctx.signal;
+          });
+          return null;
+        }
+      );
+      return null;
+    };
+
+    const { unmount } = render(<App />);
+    expect(signal?.aborted).toBe(false);
+    unmount();
+    expect(signal?.aborted).toBe(true);
+  });
+
+  it('resumes effects with the latest implementation after <Activity> is shown', () => {
+    const log: string[] = [];
+
+    const App = ({ label }: { label: string }) => {
+      useEffectReducer<null, { type: 'NOOP' }, { type: 'sub' }>(
+        s => s,
+        exec => {
+          exec({ type: 'sub' });
+          return null;
+        },
+        {
+          sub: () => {
+            log.push(`start ${label}`);
+            return () => log.push(`stop ${label}`);
+          },
+        }
+      );
+      return null;
+    };
+
+    const { rerender } = render(
+      <Activity mode="visible">
+        <App label="a" />
+      </Activity>
+    );
+    rerender(
+      <Activity mode="hidden">
+        <App label="a" />
+      </Activity>
+    );
+    rerender(
+      <Activity mode="hidden">
+        <App label="b" />
+      </Activity>
+    );
+    rerender(
+      <Activity mode="visible">
+        <App label="b" />
+      </Activity>
+    );
+
+    expect(log).toEqual(['start a', 'stop a', 'start b']);
+  });
+
+  it('ignores exec.stop(undefined)', () => {
+    const reducer: EffectReducer<number, { type: 'STOP' }> = (
+      state,
+      _,
+      exec
+    ) => {
+      exec.stop(undefined);
+      return state + 1;
+    };
+
+    const App = () => {
+      const [count, dispatch] = useEffectReducer(reducer, 0);
+      return (
+        <button data-testid="stop" onClick={() => dispatch('STOP')}>
+          {count}
+        </button>
+      );
+    };
+
+    const { getByTestId } = render(<App />);
+    fireEvent.click(getByTestId('stop'));
+    expect(getByTestId('stop').textContent).toBe('1');
   });
 });

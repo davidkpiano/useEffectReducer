@@ -30,7 +30,7 @@
     "build": "tsdown",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "tsc --noEmit",
+    "lint": "tsc --noEmit && tsc -p test",
     "prepare": "tsdown",
     "changeset:publish": "changeset version && changeset publish"
   },

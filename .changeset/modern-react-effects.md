@@ -8,3 +8,7 @@
 - `dispatch` passed to effect implementations now accepts string events, like the hook's `dispatch`.
 - `EffectEntity['status']` is now `'idle' | 'started' | 'stopped'` (was a non-exported numeric enum). `Dispatch` and `EntityStatus` types are exported.
 - Lazy initialization uses `useReducer`'s `init` argument instead of reading a ref during render (React Compiler friendly).
+- Effect implementations receive a 4th argument, `{ signal }`: an `AbortSignal` aborted when the effect stops. Effects may be `async`.
+- Effects-map implementations are looked up when an effect starts (or resumes), so they see the latest props.
+- `exec.stop(entity)` accepts `undefined`.
+- Types: string events are only accepted for events without required payload; `exec`/`dispatch` in the initial state getter are fully typed.
