@@ -76,26 +76,29 @@ interface InternalEffectEntity<
   TState,
   TEvent extends EventObject,
 > extends EffectEntity<TState, TEvent> {
+  effect: EffectObject<TState, TEvent>;
+  start: (
+    state: TState,
+    dispatch: Dispatch<TEvent>,
+    exec?: EffectFunction<TState, TEvent, any>
+  ) => void;
   /** Restarts an entity that was stopped by an unmount (StrictMode, Activity) */
-  resume: (state: TState) => void;
+  resume: (state: TState, exec?: EffectFunction<TState, TEvent, any>) => void;
 }
 
 function createEffectEntity<
   TState,
   TEvent extends EventObject,
   TEffect extends EffectObject<TState, TEvent>,
->(
-  effect: TEffect,
-  resolveExec: () => EffectFunction<TState, TEvent, TEffect> | undefined
-): InternalEffectEntity<TState, TEvent> {
+>(effect: TEffect): InternalEffectEntity<TState, TEvent> {
   let effectCleanup: ReturnType<EffectFunction<TState, TEvent, TEffect>>;
   let controller: AbortController | undefined;
   let startArgs: [TState, Dispatch<TEvent>] | undefined;
 
-  const run = () => {
+  const run = (exec: EffectFunction<TState, TEvent, any> | undefined) => {
     const [state, dispatch] = startArgs!;
     controller = new AbortController();
-    effectCleanup = resolveExec()?.(state, effect, dispatch, {
+    effectCleanup = exec?.(state, effect, dispatch, {
       signal: controller.signal,
     });
     entity.status = 'started';
@@ -104,10 +107,11 @@ function createEffectEntity<
   const entity: InternalEffectEntity<TState, TEvent> = {
     type: effect.type,
     status: 'idle',
-    start: (state, dispatch) => {
+    effect,
+    start: (state, dispatch, exec = effect.exec) => {
       if (entity.status !== 'idle') return;
       startArgs = [state, dispatch];
-      run();
+      run(exec);
     },
     stop: () => {
       if (entity.status === 'started') {
@@ -117,10 +121,10 @@ function createEffectEntity<
       effectCleanup = undefined;
       entity.status = 'stopped';
     },
-    resume: state => {
+    resume: (state, exec = effect.exec) => {
       if (entity.status === 'stopped' && startArgs) {
         startArgs[0] = state;
-        run();
+        run(exec);
       }
     },
   };
@@ -234,18 +238,14 @@ export function useEffectReducer<
     effectsMapRef.current = effectsMap;
   });
 
+  // Only called from effects, never during render
+  const getExec = (entity: InternalEffectEntity<TState, TEvent>) =>
+    effectsMapRef.current?.[entity.type as TEffect['type']] ??
+    entity.effect.exec;
+
   const createEntity = (
     effect: TEffect | EffectFunction<TState, TEvent, TEffect>
-  ) => {
-    const effectObject = toEffectObject(effect);
-    return createEffectEntity<TState, TEvent, TEffect>(
-      effectObject,
-      () =>
-        (effectsMapRef.current?.[effectObject.type as TEffect['type']] as
-          EffectFunction<TState, TEvent, TEffect> | undefined) ??
-        effectObject.exec
-    );
-  };
+  ) => createEffectEntity<TState, TEvent, TEffect>(toEffectObject(effect));
 
   const wrappedReducer = (
     [state, stateEffectTuples, entitiesToStop]: AggregatedEffectsState<
@@ -359,7 +359,7 @@ export function useEffectReducer<
           if (entity.status !== 'idle') return;
 
           runningRef.current.add(entity);
-          entity.start(effectState, wrappedDispatch);
+          entity.start(effectState, wrappedDispatch, getExec(entity));
         });
       });
 
@@ -367,7 +367,7 @@ export function useEffectReducer<
       // so that they no longer need to be iterated through
       dispatch({ type: flushEffectsSymbol, tuples: effectStateEntityTuples });
     }
-  }, [effectStateEntityTuples]);
+  }, [effectStateEntityTuples, wrappedDispatch]);
 
   // Resumed effects receive the latest committed state
   const stateRef = useRef(state);
@@ -379,7 +379,7 @@ export function useEffectReducer<
   // (StrictMode, <Activity>), resume the effects that the unmount stopped.
   useEffect(() => {
     const running = runningRef.current;
-    running.forEach(entity => entity.resume(stateRef.current));
+    running.forEach(entity => entity.resume(stateRef.current, getExec(entity)));
 
     return () => {
       running.forEach(entity => entity.stop());
