@@ -4,28 +4,68 @@ on:
   push:
     branches: [master]
 
-concurrency: ${{ github.workflow }}-${{ github.ref }}
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
-permissions:
-  contents: write
-  pull-requests: write
-  id-token: write
+permissions: {} # each job defines its own permissions explicitly
 
 jobs:
-  release:
+  version:
+    name: Version
+    if: github.repository == 'davidkpiano/useEffectReducer'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      hasChangesets: ${{ steps.changesets.outputs.has-changesets }}
+    permissions:
+      contents: write # to create release (changesets/action)
+      issues: write # to post issue comments (changesets/action)
+      pull-requests: write # to create pull request (changesets/action)
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with:
-          node-version: lts/*
+          # Node 24.17.0 breaks @changesets/changelog-github's GraphQL call
+          # (ERR_STREAM_PREMATURE_CLOSE). 24.16.0 is the last known-good 24.x.
+          # https://github.com/changesets/changesets/issues/2115
+          node-version: 24.16.0
           cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Create or update release pull request
+        id: changesets
+        uses: changesets/action@v2.1.2
+        with:
+          version-script: pnpm run version
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+  publish:
+    name: Publish
+    needs: version
+    if: needs.version.outputs.hasChangesets == 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write # to create release (changesets/action)
+      id-token: write # OIDC token for npm trusted publishing
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.16.0
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm test
-      - uses: changesets/action@v2
+      - name: Publish to npm
+        uses: changesets/action@v2.1.2
         with:
-          publish-script: pnpm release
-        env:
-          NPM_CONFIG_PROVENANCE: true
+          publish-script: pnpm run release
+          github-token: ${{ secrets.GITHUB_TOKEN }}
