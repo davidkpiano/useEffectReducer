@@ -129,8 +129,7 @@ import { useEffectReducer, type EffectReducer } from 'use-effect-reducer';
 
 type State = { status: 'idle' | 'loading'; results: string[] };
 type Event =
-  | { type: 'SEARCH'; query: string }
-  | { type: 'RESOLVE'; results: string[] };
+  { type: 'SEARCH'; query: string } | { type: 'RESOLVE'; results: string[] };
 type Effect = { type: 'fetchResults'; query: string };
 
 const searchReducer: EffectReducer<State, Event, Effect> = (

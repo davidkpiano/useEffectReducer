@@ -10,9 +10,9 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 
 import {
   useEffectReducer,
-  EffectReducer,
-  EffectEntity,
-  InitialEffectStateGetter,
+  type EffectReducer,
+  type EffectEntity,
+  type InitialEffectStateGetter,
 } from '../src';
 
 describe('useEffectReducer', () => {
@@ -688,10 +688,7 @@ describe('useEffectReducer', () => {
     const App = () => {
       const [, dispatch] = useEffectReducer(reducer, {});
       return (
-        <button
-          data-testid="go"
-          onClick={() => dispatch({ type: 'GO' })}
-        />
+        <button data-testid="go" onClick={() => dispatch({ type: 'GO' })} />
       );
     };
 
@@ -770,10 +767,7 @@ describe('useEffectReducer', () => {
       return (
         <div>
           <div data-testid="count">{count}</div>
-          <button
-            data-testid="go"
-            onClick={() => dispatch({ type: 'GO' })}
-          />
+          <button data-testid="go" onClick={() => dispatch({ type: 'GO' })} />
         </div>
       );
     };
@@ -859,10 +853,7 @@ describe('useEffectReducer', () => {
       return (
         <div>
           <div data-testid="count">{count}</div>
-          <button
-            data-testid="inc"
-            onClick={() => dispatch({ type: 'INC' })}
-          />
+          <button data-testid="inc" onClick={() => dispatch({ type: 'INC' })} />
         </div>
       );
     };
@@ -1021,11 +1012,10 @@ describe('useEffectReducer', () => {
   });
 
   it('accepts string events from dispatch inside effects', () => {
-    const reducer: EffectReducer<number, { type: 'START' } | { type: 'DONE' }> = (
-      state,
-      event,
-      exec
-    ) => {
+    const reducer: EffectReducer<
+      number,
+      { type: 'START' } | { type: 'DONE' }
+    > = (state, event, exec) => {
       if (event.type === 'START') {
         exec((_, __, dispatch) => dispatch('DONE'));
         return state;

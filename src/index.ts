@@ -27,7 +27,7 @@ export interface EffectContext {
 export type EffectFunction<
   TState,
   TEvent extends EventObject,
-  TEffect extends EffectObject<TState, TEvent>
+  TEffect extends EffectObject<TState, TEvent>,
 > = (
   state: TState,
   effect: TEffect,
@@ -44,18 +44,18 @@ export interface EffectObject<TState, TEvent extends EventObject> {
 export type Effect<
   TState,
   TEvent extends EventObject,
-  TEffect extends EffectObject<TState, TEvent>
+  TEffect extends EffectObject<TState, TEvent>,
 > = TEffect | EffectFunction<TState, TEvent, TEffect>;
 
 type EntityTuple<TState, TEvent extends EventObject> = [
   TState,
-  InternalEffectEntity<TState, TEvent>[]
+  InternalEffectEntity<TState, TEvent>[],
 ];
 
 type AggregatedEffectsState<TState, TEvent extends EventObject> = [
   TState,
   EntityTuple<TState, TEvent>[],
-  EffectEntity<TState, TEvent>[]
+  EffectEntity<TState, TEvent>[],
 ];
 
 export interface EventObject {
@@ -72,8 +72,10 @@ export interface EffectEntity<TState, TEvent extends EventObject> {
   stop: () => void;
 }
 
-interface InternalEffectEntity<TState, TEvent extends EventObject>
-  extends EffectEntity<TState, TEvent> {
+interface InternalEffectEntity<
+  TState,
+  TEvent extends EventObject,
+> extends EffectEntity<TState, TEvent> {
   /** Restarts an entity that was stopped by an unmount (StrictMode, Activity) */
   resume: (state: TState) => void;
 }
@@ -81,7 +83,7 @@ interface InternalEffectEntity<TState, TEvent extends EventObject>
 function createEffectEntity<
   TState,
   TEvent extends EventObject,
-  TEffect extends EffectObject<TState, TEvent>
+  TEffect extends EffectObject<TState, TEvent>,
 >(
   effect: TEffect,
   resolveExec: () => EffectFunction<TState, TEvent, TEffect> | undefined
@@ -129,12 +131,11 @@ function createEffectEntity<
 export interface EffectReducerExec<
   TState,
   TEvent extends EventObject,
-  TEffect extends EffectObject<TState, TEvent>
+  TEffect extends EffectObject<TState, TEvent>,
 > {
-  (effect: TEffect | EffectFunction<TState, TEvent, TEffect>): EffectEntity<
-    TState,
-    TEvent
-  >;
+  (
+    effect: TEffect | EffectFunction<TState, TEvent, TEffect>
+  ): EffectEntity<TState, TEvent>;
   stop: (entity: EffectEntity<TState, TEvent> | undefined) => void;
   replace: (
     entity: EffectEntity<TState, TEvent> | undefined,
@@ -145,7 +146,7 @@ export interface EffectReducerExec<
 export type EffectReducer<
   TState,
   TEvent extends EventObject,
-  TEffect extends EffectObject<TState, TEvent> = EffectObject<TState, TEvent>
+  TEffect extends EffectObject<TState, TEvent> = EffectObject<TState, TEvent>,
 > = (
   state: TState,
   event: TEvent,
@@ -171,7 +172,7 @@ export function toEffect<TState, TEvent extends EventObject>(
 export type EffectsMap<
   TState,
   TEvent extends EventObject,
-  TEffect extends EffectObject<TState, TEvent>
+  TEffect extends EffectObject<TState, TEvent>,
 > = {
   [key in TEffect['type']]: EffectFunction<
     TState,
@@ -193,7 +194,7 @@ const toEventObject = <TEvent extends EventObject>(
 const toEffectObject = <
   TState,
   TEvent extends EventObject,
-  TEffect extends EffectObject<TState, TEvent>
+  TEffect extends EffectObject<TState, TEvent>,
 >(
   effect: TEffect | EffectFunction<TState, TEvent, TEffect>
 ): TEffect => {
@@ -207,7 +208,7 @@ const toEffectObject = <
 export type InitialEffectStateGetter<
   TState,
   TEvent extends EventObject,
-  TEffect extends EffectObject<TState, TEvent>
+  TEffect extends EffectObject<TState, TEvent>,
 > = (
   exec: (
     effect: TEffect | EffectFunction<TState, TEvent, TEffect>
@@ -217,7 +218,7 @@ export type InitialEffectStateGetter<
 export function useEffectReducer<
   TState,
   TEvent extends EventObject,
-  TEffect extends EffectObject<TState, TEvent> = EffectObject<TState, TEvent>
+  TEffect extends EffectObject<TState, TEvent> = EffectObject<TState, TEvent>,
 >(
   effectReducer: EffectReducer<TState, TEvent, TEffect>,
   initialState: TState | InitialEffectStateGetter<TState, TEvent, TEffect>,
@@ -241,8 +242,8 @@ export function useEffectReducer<
       effectObject,
       () =>
         (effectsMapRef.current?.[effectObject.type as TEffect['type']] as
-          | EffectFunction<TState, TEvent, TEffect>
-          | undefined) ?? effectObject.exec
+          EffectFunction<TState, TEvent, TEffect> | undefined) ??
+        effectObject.exec
     );
   };
 
@@ -309,38 +310,33 @@ export function useEffectReducer<
     ];
   };
 
-  const [
-    [state, effectStateEntityTuples, entitiesToStop],
-    dispatch,
-  ] = useReducer(
-    wrappedReducer,
-    initialState,
-    (initialState): AggregatedEffectsState<TState, TEvent> => {
-      if (typeof initialState !== 'function') {
-        return [initialState, [], []];
+  const [[state, effectStateEntityTuples, entitiesToStop], dispatch] =
+    useReducer(
+      wrappedReducer,
+      initialState,
+      (initialState): AggregatedEffectsState<TState, TEvent> => {
+        if (typeof initialState !== 'function') {
+          return [initialState, [], []];
+        }
+
+        const initialEffectEntities: Array<
+          InternalEffectEntity<TState, TEvent>
+        > = [];
+        const resolvedInitialState = (
+          initialState as InitialEffectStateGetter<TState, TEvent, TEffect>
+        )(effect => {
+          const effectEntity = createEntity(effect);
+          initialEffectEntities.push(effectEntity);
+          return effectEntity;
+        });
+
+        return [
+          resolvedInitialState,
+          [[resolvedInitialState, initialEffectEntities]],
+          [],
+        ];
       }
-
-      const initialEffectEntities: Array<InternalEffectEntity<
-        TState,
-        TEvent
-      >> = [];
-      const resolvedInitialState = (initialState as InitialEffectStateGetter<
-        TState,
-        TEvent,
-        TEffect
-      >)(effect => {
-        const effectEntity = createEntity(effect);
-        initialEffectEntities.push(effectEntity);
-        return effectEntity;
-      });
-
-      return [
-        resolvedInitialState,
-        [[resolvedInitialState, initialEffectEntities]],
-        [],
-      ];
-    }
-  );
+    );
 
   const wrappedDispatch: Dispatch<TEvent> = useCallback(
     event => dispatch(toEventObject<TEvent>(event)),
