@@ -14,15 +14,42 @@ npm install use-effect-reducer
 
 An effect reducer is a reducer with a third argument, `exec`. Call `exec(effect)` to queue an effect. Effects run after React commits the new state.
 
-```jsx
-import { useEffectReducer } from 'use-effect-reducer';
+```tsx
+import {
+  useEffectReducer,
+  type EffectEntity,
+  type EffectReducer,
+} from 'use-effect-reducer';
 
-function searchReducer(state, event, exec) {
+interface Result {
+  id: number;
+  title: string;
+}
+
+interface State {
+  status: 'idle' | 'loading' | 'error';
+  results: Result[];
+  request?: EffectEntity<State, Event>;
+}
+
+type Event =
+  | { type: 'SEARCH'; query: string }
+  | { type: 'RESOLVE'; results: Result[] }
+  | { type: 'REJECT' };
+
+type Effect = { type: 'fetchResults'; query: string };
+
+const searchReducer: EffectReducer<State, Event, Effect> = (
+  state,
+  event,
+  exec
+) => {
   switch (event.type) {
     case 'SEARCH':
       return {
+        ...state,
         status: 'loading',
-        results: state.results,
+        // Stop the previous request (if any) and start a new one
         request: exec.replace(state.request, {
           type: 'fetchResults',
           query: event.query,
@@ -32,10 +59,8 @@ function searchReducer(state, event, exec) {
       return { status: 'idle', results: event.results };
     case 'REJECT':
       return { status: 'error', results: [] };
-    default:
-      return state;
   }
-}
+};
 
 function Search() {
   const [state, dispatch] = useEffectReducer(
@@ -45,9 +70,10 @@ function Search() {
       async fetchResults(state, effect, dispatch, { signal }) {
         try {
           const res = await fetch(`/api/search?q=${effect.query}`, { signal });
-          dispatch({ type: 'RESOLVE', results: await res.json() });
-        } catch (error) {
-          if (!signal.aborted) dispatch({ type: 'REJECT' });
+          const results: Result[] = await res.json();
+          dispatch({ type: 'RESOLVE', results });
+        } catch {
+          if (!signal.aborted) dispatch('REJECT');
         }
       },
     }
@@ -68,7 +94,9 @@ function Search() {
 }
 ```
 
-Each `SEARCH` event stops the previous request and starts a new one. Stopping an effect aborts its `signal`, which cancels the previous `fetch`.
+Each `SEARCH` event calls `exec.replace`, which stops the previous request and queues a new one. Stopping an effect aborts its `signal`, which cancels the previous `fetch`.
+
+`EffectReducer<State, Event, Effect>` types the reducer. With it, `exec` only accepts `Effect` objects, the `effects` object must implement every `Effect` type, and `dispatch` only accepts `Event` objects. `dispatch('REJECT')` is allowed because `REJECT` has no payload.
 
 ## API
 
@@ -119,30 +147,3 @@ An implementation can return a cleanup function, which runs when the effect stop
 Effects stop when the component unmounts. When a component inside `<Activity>` is hidden and shown again, or when StrictMode remounts it, running effects stop and then start again with the latest state.
 
 Implementations in `effects` are looked up when the effect starts, so they read the latest props.
-
-## TypeScript
-
-Type the reducer with `EffectReducer<State, Event, Effect>`. `exec`, `dispatch`, and the `effects` object are then type-checked against `Event` and `Effect`.
-
-```ts
-import { useEffectReducer, type EffectReducer } from 'use-effect-reducer';
-
-type State = { status: 'idle' | 'loading'; results: string[] };
-type Event =
-  { type: 'SEARCH'; query: string } | { type: 'RESOLVE'; results: string[] };
-type Effect = { type: 'fetchResults'; query: string };
-
-const searchReducer: EffectReducer<State, Event, Effect> = (
-  state,
-  event,
-  exec
-) => {
-  switch (event.type) {
-    case 'SEARCH':
-      exec({ type: 'fetchResults', query: event.query });
-      return { ...state, status: 'loading' };
-    case 'RESOLVE':
-      return { status: 'idle', results: event.results };
-  }
-};
-```
