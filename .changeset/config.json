@@ -1,8 +1,15 @@
 {
   "$schema": "https://unpkg.com/@changesets/config@4.0.1/schema.json",
-  "changelog": "@changesets/cli/changelog",
+  "changelog": [
+    "@changesets/changelog-github",
+    { "repo": "davidkpiano/useEffectReducer" }
+  ],
   "commit": false,
+  "fixed": [],
   "linked": [],
   "access": "public",
-  "baseBranch": "master"
+  "baseBranch": "master",
+  "updateInternalDependencies": "patch",
+  "ignore": [],
+  "format": false
 }

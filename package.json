@@ -22,7 +22,10 @@
     "lint": "tsc && tsc -p test",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "release": "pnpm build && changeset publish"
+    "changeset": "changeset",
+    "version": "changeset version",
+    "release": "pnpm build && changeset publish",
+    "prepublishOnly": "pnpm build"
   },
   "keywords": [
     "react",
@@ -52,6 +55,7 @@
   "author": "David Khourshid",
   "sideEffects": false,
   "devDependencies": {
+    "@changesets/changelog-github": "^1.0.1",
     "@changesets/cli": "^3.0.3",
     "@testing-library/react": "^16.3.3",
     "@types/react": "^19.3.0",
