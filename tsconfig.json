@@ -1,18 +1,18 @@
 {
-  "include": ["src", "types"],
+  "include": ["src"],
   "compilerOptions": {
-    "target": "ES2020",
-    "module": "ESNext",
-    "lib": ["dom", "ESNext"],
-    "declaration": true,
-    "sourceMap": true,
-    "rootDir": "./src",
+    "target": "ES2022",
+    "module": "preserve",
+    "lib": ["DOM", "ES2022"],
     "strict": true,
     "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true,
-    "moduleResolution": "bundler",
+    "verbatimModuleSyntax": true,
+    "erasableSyntaxOnly": true,
+    "isolatedDeclarations": true,
+    "declaration": true,
+    "noEmit": true,
     "jsx": "react-jsx",
-    "esModuleInterop": true,
     "skipLibCheck": true
   }
 }

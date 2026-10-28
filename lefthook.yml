@@ -2,5 +2,5 @@ pre-commit:
   commands:
     lint:
       files: git diff --name-only @{push}
-      glob: "*.{ts,tsx,js,jsx}"
-      run: npx tsc --noEmit
+      glob: '*.{ts,tsx,js,jsx}'
+      run: pnpm lint
