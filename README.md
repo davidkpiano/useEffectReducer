@@ -1,347 +1,149 @@
 # useEffectReducer
 
-A React hook for managing side-effects in your reducers.
+A React hook for managing side effects in reducers.
 
 Inspired a looooong time ago by the [`useReducerWithEmitEffect` hook idea](https://gist.github.com/sophiebits/145c47544430c82abd617c9cdebefee8) by Sophie Alpert.
 
-If you know how to `useReducer`, you already know how to `useEffectReducer`.
-
-## Table of Contents
-
-- [Installation](#installation)
-- [Quick Start](#quick-start)
-- [Named Effects](#named-effects)
-- [Effect Implementations](#effect-implementations)
-- [Initial Effects](#initial-effects)
-- [Effect Entities](#effect-entities)
-- [Effect Cleanup](#effect-cleanup)
-- [Replacing Effects](#replacing-effects)
-- [String Events](#string-events)
-- [API](#api)
-  - [`useEffectReducer` hook](#useeffectreducer-hook)
-  - [`exec(effect)`](#execeffect)
-  - [`exec.stop(entity)`](#execstopentity)
-  - [`exec.replace(entity, effect)`](#execreplaceentity-effect)
-- [TypeScript](#typescript)
-
-## Installation
+## Install
 
 ```bash
 npm install use-effect-reducer
 ```
 
-```js
-import { useEffectReducer } from 'use-effect-reducer';
-```
+## Quick start
 
-## Quick Start
+An effect reducer is a reducer with a third argument, `exec`. Call `exec(effect)` to queue an effect. Effects run after React commits the new state.
 
-An effect reducer takes 3 arguments:
-
-1. `state` - the current state
-2. `event` - the event that was dispatched
-3. `exec` - a function that captures effects to be executed and returns an [effect entity](#effect-entities)
-
-```js
+```jsx
 import { useEffectReducer } from 'use-effect-reducer';
 
-const countReducer = (state, event, exec) => {
+function searchReducer(state, event, exec) {
   switch (event.type) {
-    case 'INC':
-      exec(() => {
-        console.log('Going up!');
-      });
-
+    case 'SEARCH':
       return {
-        ...state,
-        count: state.count + 1,
+        status: 'loading',
+        results: state.results,
+        request: exec.replace(state.request, {
+          type: 'fetchResults',
+          query: event.query,
+        }),
       };
-
-    default:
-      return state;
-  }
-};
-
-const App = () => {
-  const [state, dispatch] = useEffectReducer(countReducer, { count: 0 });
-
-  return (
-    <div>
-      <output>Count: {state.count}</output>
-      <button onClick={() => dispatch('INC')}>Increment</button>
-    </div>
-  );
-};
-```
-
-## How It Works
-
-Internally, `useEffectReducer` abstracts this pattern:
-
-```js
-const myReducer = ([state], event) => {
-  const effects = [];
-  const exec = (effect) => effects.push(effect);
-  const nextState = // calculate next state
-  return [nextState, effects];
-};
-
-const [[state, effects], dispatch] = useReducer(myReducer);
-
-useEffect(() => {
-  effects.forEach((effect) => {
-    // execute the effect
-  });
-}, [effects]);
-```
-
-Instead of being implicit about which effects are executed and when, you make this explicit in the effect reducer with `exec`. The hook then properly executes pending effects within `useEffect()`.
-
-## Named Effects
-
-A better way to make reusable effect reducers is to use **named, parameterized effects**. Pass an effect object to `exec(...)` and specify the implementation as the 3rd argument to `useEffectReducer`:
-
-```js
-const fetchEffectReducer = (state, event, exec) => {
-  switch (event.type) {
-    case 'FETCH':
-      exec({ type: 'fetchFromAPI', user: event.user });
-      return { ...state, status: 'fetching' };
     case 'RESOLVE':
-      return { status: 'fulfilled', user: event.data };
+      return { status: 'idle', results: event.results };
+    case 'REJECT':
+      return { status: 'error', results: [] };
     default:
       return state;
   }
-};
+}
 
-const Fetcher = () => {
+function Search() {
   const [state, dispatch] = useEffectReducer(
-    fetchEffectReducer,
-    { status: 'idle', user: undefined },
+    searchReducer,
+    { status: 'idle', results: [] },
     {
-      fetchFromAPI: (_, effect, dispatch) => {
-        fetch(`/api/users/${effect.user}`)
-          .then((res) => res.json())
-          .then((data) => {
-            dispatch({ type: 'RESOLVE', data });
-          });
+      async fetchResults(state, effect, dispatch, { signal }) {
+        try {
+          const res = await fetch(`/api/search?q=${effect.query}`, { signal });
+          dispatch({ type: 'RESOLVE', results: await res.json() });
+        } catch (error) {
+          if (!signal.aborted) dispatch({ type: 'REJECT' });
+        }
       },
     }
   );
 
-  // ...
-};
+  return (
+    <>
+      <input
+        onChange={e => dispatch({ type: 'SEARCH', query: e.target.value })}
+      />
+      <ul>
+        {state.results.map(result => (
+          <li key={result.id}>{result.title}</li>
+        ))}
+      </ul>
+    </>
+  );
+}
 ```
 
-## Effect Implementations
-
-An effect implementation receives 4 arguments:
-
-1. `state` - the state at the time `exec(effect)` was called
-2. `effect` - the effect object
-3. `dispatch` - the dispatch function for sending events back to the reducer
-4. `context` - `{ signal }`, an `AbortSignal` that is aborted when the effect is stopped
-
-Implementations in the effects map are looked up when the effect starts, so they see the latest props.
-
-If the component is hidden by `<Activity>` (or remounted by StrictMode), running effects are stopped and later resumed with the latest state.
-
-Return a cleanup function to dispose of the effect:
-
-```js
-exec(() => {
-  const id = setTimeout(() => {
-    // do some delayed side-effect
-  }, 1000);
-
-  return () => {
-    clearTimeout(id);
-  };
-});
-```
-
-Or use `signal`, which also works with async effects:
-
-```js
-exec(async (state, effect, dispatch, { signal }) => {
-  const res = await fetch('/api/data', { signal });
-  dispatch({ type: 'RESOLVE', data: await res.json() });
-});
-```
-
-## Initial Effects
-
-The 2nd argument can be a function that receives `exec` and returns initial state:
-
-```js
-const getInitialState = (exec) => {
-  exec({ type: 'fetchData', query: '*' });
-  return { data: null };
-};
-
-const [state, dispatch] = useEffectReducer(fetchReducer, getInitialState, {
-  fetchData(_, { query }, dispatch) {
-    fetch(`/api?${query}`)
-      .then((res) => res.json())
-      .then((data) => dispatch({ type: 'RESOLVE', data }));
-  },
-});
-```
-
-## Effect Entities
-
-`exec(effect)` returns an **effect entity** representing the running effect. Store it in state to control the effect later:
-
-```js
-const someReducer = (state, event, exec) => {
-  return {
-    ...state,
-    someEffect: exec(() => {
-      /* ... */
-    }),
-  };
-};
-```
-
-## Effect Cleanup
-
-Effects can be explicitly stopped using `exec.stop(entity)`:
-
-```js
-const timerReducer = (state, event, exec) => {
-  if (event.type === 'START') {
-    return {
-      ...state,
-      timer: exec(() => {
-        const id = setTimeout(() => {
-          // delayed effect
-        }, 1000);
-
-        return () => clearTimeout(id);
-      }),
-    };
-  } else if (event.type === 'STOP') {
-    exec.stop(state.timer);
-    return state;
-  }
-
-  return state;
-};
-```
-
-All running effects are automatically cleaned up when the component unmounts.
-
-## Replacing Effects
-
-Use `exec.replace(entity, effect)` to stop an existing effect and start a new one:
-
-```js
-const timerReducer = (state, event, exec) => {
-  if (event.type === 'START') {
-    return {
-      ...state,
-      timer: exec(() => doSomeDelay()),
-    };
-  } else if (event.type === 'LAP') {
-    return {
-      ...state,
-      timer: exec.replace(state.timer, () => doSomeDelay()),
-    };
-  } else if (event.type === 'STOP') {
-    exec.stop(state.timer);
-    return state;
-  }
-
-  return state;
-};
-```
-
-## String Events
-
-For events without payload, you can dispatch the type string directly:
-
-```js
-// Same as dispatch({ type: 'INC' })
-dispatch('INC');
-```
-
-This also works for the `dispatch` passed to effect implementations. In TypeScript, only events with no required payload can be dispatched as strings.
+Each `SEARCH` event stops the previous request and starts a new one. Stopping an effect aborts its `signal`, which cancels the previous `fetch`.
 
 ## API
 
-### `useEffectReducer` hook
+### `useEffectReducer(reducer, initialState, effects?)`
 
 ```js
-const [state, dispatch] = useEffectReducer(effectReducer, initialState);
-const [state, dispatch] = useEffectReducer(effectReducer, initialState, effectsMap);
-const [state, dispatch] = useEffectReducer(effectReducer, initFunction, effectsMap);
+const [state, dispatch] = useEffectReducer(reducer, initialState, effects);
 ```
+
+- `reducer`: `(state, event, exec) => nextState`
+- `initialState`: the initial state, or a function `exec => initialState` that can queue effects on mount
+- `effects`: an optional object that maps effect types to [effect implementations](#effect-implementations)
+
+`dispatch` accepts an event object or, for events without a payload, the event type as a string. `dispatch('RESET')` is the same as `dispatch({ type: 'RESET' })`.
 
 ### `exec(effect)`
 
-Queues an effect for execution. Returns an [effect entity](#effect-entities).
+Queues an effect and returns an **effect entity**. Store the entity in state to stop or replace the effect later.
+
+An effect is either an object with a `type` that matches a key in `effects`, or an inline effect implementation:
 
 ```js
-const entity = exec({ type: 'alert', message: 'hello' });
-
-// or inline:
-const entity = exec(() => alert('hello'));
+exec({ type: 'fetchResults', query: 'react' });
+exec(() => console.log('searching'));
 ```
 
 ### `exec.stop(entity)`
 
-Stops the effect represented by the entity, aborts its `signal`, and runs its cleanup function. Does nothing if `entity` is `undefined`.
-
-```js
-exec.stop(someEntity);
-```
+Stops the effect: aborts its `signal` and calls its cleanup function. Does nothing if `entity` is `undefined`.
 
 ### `exec.replace(entity, effect)`
 
-Stops the existing entity and queues a new effect. Returns a new effect entity.
+Stops `entity` (if defined) and queues `effect`. Returns the new entity.
+
+### Effect implementations
 
 ```js
-const newEntity = exec.replace(oldEntity, newEffect);
+(state, effect, dispatch, { signal }) => cleanup | void
 ```
+
+- `state`: the state returned by the reducer call that queued the effect
+- `effect`: the effect object
+- `dispatch`: the same `dispatch` that the hook returns
+- `signal`: an `AbortSignal` that is aborted when the effect stops
+
+An implementation can return a cleanup function, which runs when the effect stops. Implementations can be `async`.
+
+Effects stop when the component unmounts. When a component inside `<Activity>` is hidden and shown again, or when StrictMode remounts it, running effects stop and then start again with the latest state.
+
+Implementations in `effects` are looked up when the effect starts, so they read the latest props.
 
 ## TypeScript
 
-The effect reducer can be typed with `EffectReducer<TState, TEvent, TEffect>`:
+Type the reducer with `EffectReducer<State, Event, Effect>`. `exec`, `dispatch`, and the `effects` object are then type-checked against `Event` and `Effect`.
 
 ```ts
-import { useEffectReducer, EffectReducer } from 'use-effect-reducer';
+import { useEffectReducer, type EffectReducer } from 'use-effect-reducer';
 
-interface User {
-  name: string;
-}
+type State = { status: 'idle' | 'loading'; results: string[] };
+type Event =
+  | { type: 'SEARCH'; query: string }
+  | { type: 'RESOLVE'; results: string[] };
+type Effect = { type: 'fetchResults'; query: string };
 
-type FetchState =
-  | { status: 'idle'; user: undefined }
-  | { status: 'fetching'; user: User | undefined }
-  | { status: 'fulfilled'; user: User };
-
-type FetchEvent =
-  | { type: 'FETCH'; user: string }
-  | { type: 'RESOLVE'; data: User };
-
-type FetchEffect = {
-  type: 'fetchFromAPI';
-  user: string;
-};
-
-const fetchEffectReducer: EffectReducer<
-  FetchState,
-  FetchEvent,
-  FetchEffect
-> = (state, event, exec) => {
+const searchReducer: EffectReducer<State, Event, Effect> = (
+  state,
+  event,
+  exec
+) => {
   switch (event.type) {
-    case 'FETCH':
-      exec({ type: 'fetchFromAPI', user: event.user });
-      return { ...state, status: 'fetching' };
+    case 'SEARCH':
+      exec({ type: 'fetchResults', query: event.query });
+      return { ...state, status: 'loading' };
     case 'RESOLVE':
-      return { status: 'fulfilled', user: event.data };
-    default:
-      return state;
+      return { status: 'idle', results: event.results };
   }
 };
 ```
